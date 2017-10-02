@@ -80,7 +80,7 @@ class ATask(val id: Int, val delay:Int, executor: Executor?, code: TaskContext.(
 	init {
 		tasks.add(this)
 		onComplete {
-			if (it.isSuccess) successes.incrementAndGet()
+			if (it.hasValue) successes.incrementAndGet()
 			tasks.remove(this)
 		}
 	}

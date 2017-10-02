@@ -233,10 +233,10 @@ open class TModule: Module<TModule.TActivity>() {
 			val ka = rndChance(3)
 			val time = if (unbind) container.timeLeft.let { if (it > 10) it else 10 } else 0
 			log(2, id, "# binding to M$n    KA: $ka;  ${nRef.dumpConfig};  ${if (unbind) "X: $time" else ""}")
-			val result = bind(nRef.klas, ka, null).ifFailure { nRef.removeBinder(ref) }.ifSuccess {
+			val result = bind(nRef.klas, ka, null).onFailure { nRef.removeBinder(ref) }.onValue {
 				if (unbind) container.timeLeft.let { scheduler.schedule(rnd1(if (it > 10) it else 10)) { unbind(nRef.id) } }
 			}
-			handle(ModuleBoundEvent(nRef, result.exceptionOrNull))
+			handle(ModuleBoundEvent(nRef, result.failureOrNull))
 			nRef
 		} else {
 			log(2, id, "# can't bindAny to M$n")
@@ -461,7 +461,7 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	inner class SyncRequestEvent(val id: String, val m: TModule, val result: Result<Int>): InternalEvent() {
-		override fun details() = "$this $id  ${(result as? Result.Failure)?.exception?.toString() ?: ""}"
+		override fun details() = "$this $id  ${(result as? Result.Failure)?.failure?.toString() ?: ""}"
 		//		override fun toString() = "<x"//↑
 		override fun toString() = "\u2191"//↑
 	}
@@ -479,8 +479,8 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	inner class AsyncRequestEndEvent(val c: TCancellation, val result: Result<Int>): InternalEvent() {
-		val exception: Throwable? = result.exceptionOrNull
-		override fun details() = "$this ${c.id}   ${if (exception == null) "" else "${exception.javaClass.simpleName.dropLast(5)}: ${exception.message};  ${exception.cause?.toString() ?: ""}"}"//\n${exception.printStackTrace()}"}"
+		val exception: Throwable? = result.failureOrNull
+		override fun details() = "$this ${c.id}   ${if (exception == null) "" else "${exception.javaClass.simpleName.dropLast(5)}: ${exception.message};  ${exception.cause?.toString() ?: ""}"}"//\n${failure.printStackTrace()}"}"
 		//		override fun toString() = "v"//⇓
 		override fun toString() = "\u21D3"//⇓
 	}

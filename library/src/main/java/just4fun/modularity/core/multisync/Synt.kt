@@ -35,7 +35,7 @@ open class Synt : EasyList<ThreadInfo>() {
 	/** Tries to execute [code] under synchronized lock. As a resolution of a case of deadlock doesn't execute [code] and returns [Optional.empty]. */
 	fun <T> lockedOrDiscard(priority: Int = 0, code: () -> T): Result<T> {
 		val result = MultiSync.SYNC(this, priority, Discard, code, null)
-		return if (result == MultiSync.NULL) Result.Failure(DeadlockException("Request discarded due to the deadlock")) else Result.Success(result)
+		return if (result == MultiSync.NULL) Result(DeadlockException("Request discarded due to the deadlock")) else Result(result)
 	}
 	/** Tries to execute [code] under synchronized lock. As a resolution of a case of deadlock executes [code] in parallel without lock. */
 	fun <T> lockedOrTamper(priority: Int = 0, code: () -> T): T {

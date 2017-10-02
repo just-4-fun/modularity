@@ -1,16 +1,14 @@
 package just4fun.modularity.core
 
+import just4fun.kotlinkit.DEBUG
 import just4fun.kotlinkit.Result
-import just4fun.modularity.core.ContainerState.*
-import just4fun.kotlinkit.async.*
-import just4fun.modularity.core.multisync.Synt
-import just4fun.kotlinkit.Result.Failure
-import just4fun.kotlinkit.Result.Success
 import just4fun.kotlinkit.Safely
+import just4fun.kotlinkit.async.*
+import just4fun.modularity.core.ContainerState.*
+import just4fun.modularity.core.multisync.Synt
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.experimental.CoroutineContext
 import java.util.concurrent.TimeUnit.MILLISECONDS as ms
-import  just4fun.kotlinkit.DEBUG
 
 
 enum class ContainerState { Populated, Quitting, Empty, Shutdown }
@@ -72,7 +70,7 @@ abstract class ModuleContainer {
 	fun <M: Module<*>> moduleRef(moduleClass: Class<M>, bindID: Any? = null) = ModuleReference(moduleClass, bindID)
 	
 	private fun <M: Module<*>> bindExternal(ref: ModuleReference<M>): Result<M> = synchronized(lock) {
-		if (state == Shutdown) return Failure(Exception("Module Container has been shutdown."))
+		if (state == Shutdown) return Result(Exception("Module Container has been shutdown."))
 		val prevState = state
 		if (state != Populated) {
 			state = Populated
@@ -80,8 +78,8 @@ abstract class ModuleContainer {
 			if (prevState == Empty) Safely { onContainerPopulated() }
 		}
 		return moduleBind(ref.moduleClass, ref.bindID, root, false, null, true)
-		  .ifSuccess { if (!externals.contains(ref)) externals.add(ref) }
-		  .ifFailure { if (externals.isEmpty()) state = Quitting; if (isContainerEmpty()) containerEmpty() }
+		  .onValue { if (!externals.contains(ref)) externals.add(ref) }
+		  .onFailure { if (externals.isEmpty()) state = Quitting; if (isContainerEmpty()) containerEmpty() }
 	}
 	
 	private fun unbindExternal(ref: ModuleReference<*>): Unit = synchronized(lock) {
@@ -154,40 +152,34 @@ abstract class ModuleContainer {
 			currentId = bindId
 			val m = constructor?.invoke() ?: serviceClass.newInstance() as M
 			m.setConstructed()
-			val res = if (user === root) Success(m) else m.canBind<M>(user, keepActive, bindId)
-			res.ifSuccess {
+			val res = if (user === root) Result(m) else m.canBind<M>(user, keepActive, bindId)
+			res.onValue {
 				m.addUser(user, keepActive, warnCyclic)
 				m.setCreated()
 				if (synchronized(unregistered) { unregistered.none { isPredecessor(it, m) } }) makeReady(m)
-			}.exceptionAs { ModuleConstructionException(m.moduleName, it) }
+			}.failureAs { ModuleConstructionException(m.moduleName, it) }
 		} catch (e: Throwable) {
-			Failure<M>(if (e is ModuleConstructionException) e
+			Result<M>(if (e is ModuleConstructionException) e
 			else {
 				val msg = if (e is IllegalAccessException) "${serviceClass.name} can not be a singleton object." else "Failed to create module instance of ${serviceClass.name}"
 				ModuleConstructionException(msg, e)
 			})
-		}.ifFailure { moduleFind(serviceClass, bindId)?.apply { setCreated(it) } }
+		}.onFailure { moduleFind(serviceClass, bindId)?.apply { setCreated(it) } }
 		
 		val warn = if (user.dead) "Module of ${serviceClass.name} is already unregistered from ModuleContainer."
 		else if (serviceClass == user::class.java) "Module of ${serviceClass.name} can not bind to itself."
 		else if (state == Shutdown) "Creation of ${serviceClass.name} is impossible since ModuleContainer has shutdown. "
 		else null
 		//
-		if (warn != null) Failure<M>(ModuleBindingException("Can't bind ${user.moduleName} to ${serviceClass.name}.  $warn"))
+		if (warn != null) Result<M>(ModuleBindingException("Can't bind ${user.moduleName} to ${serviceClass.name}.  $warn"))
 		else {
 			val server = moduleFind(serviceClass, bindId)
 			if (server == null) construct()
 			else {
-				val res = if (user === root) Success(server) else server.canBind<M>(user, keepActive, bindId)
-				when (res) {
-					is Failure -> res
-					is Success -> when (server.addUser(user, keepActive, warnCyclic)) {
-						true -> res
-						false -> construct()
-					}
-				}
+				val res = if (user === root) Result(server) else server.canBind<M>(user, keepActive, bindId)
+				if (res.hasFailure || server.addUser(user, keepActive, warnCyclic)) res else construct()
 			}
-		}.ifFailure { if (it !is ModuleConstructionException) logError(it) }
+		}.onFailure { if (it !is ModuleConstructionException) logError(it) }
 	}
 	
 	internal fun moduleRegister(m: Module<*>) {
@@ -278,7 +270,7 @@ abstract class ModuleContainer {
 		val isBound: Boolean get() = module != null
 		private val lock = this
 		
-		fun bind(): Result<M> = synchronized(lock) { bindExternal(this).ifSuccess { module = it } }
+		fun bind(): Result<M> = synchronized(lock) { bindExternal(this).onValue { module = it } }
 		
 		fun unbind() = synchronized(lock) {
 			module = null
@@ -286,12 +278,10 @@ abstract class ModuleContainer {
 		}
 		
 		fun <T> use(context: CoroutineContext? = null, code: suspend M.() -> T): AsyncResult<T> {
-			val mRes = synchronized(lock) {if (isBound) Success(module!!) else bindExternal(this)}
-			return when (mRes) {
-				is Success -> SuspendTask<T>().start(mRes.value, context, code)
-				  .onComplete { synchronized(lock) { if (!isBound) unbindExternal(this) } }
-				is Failure -> FailedAsyncResult(mRes.exception)
-			}
+			val mRes = synchronized(lock) {if (isBound) Result(module!!) else bindExternal(this)}
+			return if (mRes.hasFailure) FailedAsyncResult(mRes.failure!!)
+			else SuspendTask<T>().start(mRes.value!!, context, code)
+			  .onComplete { synchronized(lock) { if (!isBound) unbindExternal(this) } }
 		}
 	}
 	

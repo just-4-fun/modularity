@@ -322,12 +322,12 @@ open class TModule: Module<TActivity>() {
 			if (suspended) useAsyncS(time, n)
 			else useAsync(time, n)
 		}.onComplete {
-			it.ifFailure {
+			it.onFailure {
 				Event(Xecute, id, n, 0)
 				val c = useCounter.decrementAndGet()
 				if (done.get() && c == 0) session.moduleDone()
 				if (Debug.FineGrain) log(this@TModule, "exec      $n     >     failed with $it")
-			}.ifSuccess {
+			}.onValue {
 				val c = useCounter.decrementAndGet()
 				if (done.get() && c == 0) session.moduleDone()
 				if (Debug.FineGrain) log(this@TModule, "exec      $it     >")

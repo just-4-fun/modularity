@@ -1,15 +1,16 @@
 package just4fun.modularity.core
 
+import just4fun.kotlinkit.DEBUG
 import just4fun.kotlinkit.Result
-import  just4fun.kotlinkit.DEBUG
+import just4fun.kotlinkit.Safely
+import just4fun.kotlinkit.async.*
 import just4fun.modularity.core.StateFactor.*
 import just4fun.modularity.core.TriggerOption.*
-import just4fun.kotlinkit.async.*
 import just4fun.modularity.core.multisync.Synt
-import just4fun.modularity.core.utils.*
-import just4fun.kotlinkit.Result.Failure
-import just4fun.kotlinkit.Result.Success
-import just4fun.kotlinkit.Safely
+import just4fun.modularity.core.utils.EasyList
+import just4fun.modularity.core.utils.EasyListElement
+import just4fun.modularity.core.utils.RestCalc
+import just4fun.modularity.core.utils.RestCalculator
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.experimental.Continuation
@@ -192,17 +193,17 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 	
 	@param[T] return type of [code] function
 	@property[code] The [code] function that returns a value of type [T].
-	@return [Success] if module is currently [activeAndEnabled] and [code] has executed successfully. Otherwise [Failure] with corresponding exception.
+	@return [Value] if module is currently [activeAndEnabled] and [code] has executed successfully. Otherwise [Failure] with corresponding failure.
 	 */
 	protected fun <T> executeIfActive(code: ACTIVITY.() -> T): Result<T> = if (canIFRequest()) {
 		try {
-			activity?.let { Success(code(it)) } ?: Failure<T>(calcException())
+			activity?.let { Result(code(it)) } ?: Result<T>(calcException())
 		} catch (x: Throwable) {
-			Failure<T>(x)
+			Result<T>(x)
 		} finally {
 			doneIFRequest()
 		}
-	} else Failure<T>(calcException())
+	} else Result<T>(calcException())
 	
 	private fun canIFRequest() = synchronized(rqLock) { if (rqBalance < 0 || NOT(ACTIVE)) false else run { rqBalance++; true } }
 	private fun doneIFRequest() = synchronized(rqLock) { if (rqBalance > 0) rqBalance-- }
@@ -263,7 +264,7 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 	protected fun <M: Module<*>> bind(serviceClass: KClass<M>, keepActive: Boolean = false, bindId: Any? = null, allowCyclicBinding: Boolean = false): Result<M> {
 		val mRes = sys.moduleBind(serviceClass.java, bindId, this, keepActive, null, !allowCyclicBinding)
 		// should be scheduled to avoid actions on not assigned ref
-		mRes.ifSuccess {
+		mRes.onValue {
 			if (!it.enabled) AsyncTask(0, executionContext) { if (!it.enabled) Safely { onServiceDisability(it, false) } }
 		}
 		return mRes
@@ -385,10 +386,10 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 	@Suppress("UNCHECKED_CAST")
 	internal fun <M: Module<*>> canBind(user: Module<*>, keepActive: Boolean, bindId: Any?): Result<M> {
 		return try {
-			if (allowBinding(user::class.java, keepActive, bindId)) Success(this as M)
-			else Failure(ModuleBindingException("Module ${user.moduleName} can not bind to $moduleName due to the policy defined in method 'allowBinding'"))
+			if (allowBinding(user::class.java, keepActive, bindId)) Result(this as M)
+			else Result(ModuleBindingException("Module ${user.moduleName} can not bind to $moduleName due to the policy defined in method 'allowBinding'"))
 		} catch (x: Throwable) {
-			Failure(ModuleException("Module ${user.moduleName} can not bind to $moduleName due to an error in 'allowBinding'", x))
+			Result(ModuleException("Module ${user.moduleName} can not bind to $moduleName due to an error in 'allowBinding'", x))
 		}
 	}
 	
@@ -593,7 +594,7 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 		}
 		
 		override fun onComplete(result: Result<Unit>) {
-			result.ifFailure {
+			result.onFailure {
 				disable(if (activation) ModuleActivationException(moduleName, it) else ModuleDeactivationException(moduleName, it), true)
 			}
 			SYNC.lockedOrDefer { if (activation) SET(ACTIVATING, false) else SET(DEACTIVATING, false) }
@@ -630,7 +631,7 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 			AsyncTask(currentBackoff(now() - started), executionContext) {
 				tryComplete(condition, expect, compl)
 			}.onComplete {
-				if (it is Failure) compl.resumeWithException(it.exception)
+				it.ifFailure { compl.resumeWithException(it) }
 			}
 		}
 		
@@ -682,9 +683,11 @@ abstract class Module<ACTIVITY: ModuleActivity>: SuspensionExecutor {
 			posting = true
 			task = AsyncTask((deadline - now()).toInt()) { release() }
 			  .onComplete {
-				  if (it is Failure && it.exception !is CancellationException) {
-					  System.err.println(it.exception.printStackTrace())
-					  release()
+				  it.ifFailure {
+					  if (it !is CancellationException) {
+						  System.err.println(it.printStackTrace())
+						  release()
+					  }
 				  }
 			  }
 		}
