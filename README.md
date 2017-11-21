@@ -217,6 +217,7 @@ A module is alive as long as it has users, i.e. the module is created when the f
 The lifecycle of a `BaseModule` successor is simple. It’s alive until it’s unbound whereupon it’s destroyed and removed from the container.  
 A `Module` successor during its lifecycle internally passes through the following states:   
 ![Module state machine](https://github.com/just-4-fun/modularity/blob/master/docs/images/phases.png)   
+![Module state machine](./docs/images/phases.png)   
 
 - **CREATED**:
 At this state the module is created and added to the container.  
