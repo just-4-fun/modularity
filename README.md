@@ -119,7 +119,7 @@ Since the implement is not always available and ready to execute calls, those ca
 The accessor guarantees a caller to deliver a request to the implement the moment it’s ready to execute it. (State-transparency feature).**  
 `ModuleImplement` class also supports asynchronous activation and deactivation. So in addition **the accessor guarantees the implement to call it only while it’s ready to execute calls. I.e. no earlier than its activation is finished, and no later than its deactivation is started.  (State management feature).**  
 The type of the implement is declared in the module type parameter: `Module<T: ModuleImplement>`. And when new implement is required, it’s requested from the module’s `onCreateImplement(): T` callback. In fact the module can implement it by itself. Or even return instances of different subclasses of `T` depending of the circumstances.   
-![Module structure](./docs/images/module_anatomy.png)   
+![Module structure](./docs/images/module_structure.png)   
 
 
 ### Implement accessor usage
@@ -156,7 +156,7 @@ The current context can be obtained from `implement.threadContext`.
 
 A module is uniquely identified within the container by the combination of its class and its optional `bindID`. This combination is used for module lookup. And other modules use it to bind this module. Furthermore the `bindID` is accessible since the beginning of module construction so it can be used for initialization.  
 One module binds another for the purpose of its use. So in this relation the first is a user and the second is a server.  
-![Module interaction](./docs/images/module_relation.png)   
+![Module interaction](./docs/images/module_interrelations.png)   
 
 **A server module guarantees a user that it will stay alive and serve while it’s bound by the user. I.e. the module serves as long as the user holds it.**   
 
@@ -473,7 +473,7 @@ class MainActivity: Activity(), UiModuleReference<MainModule> {
 
 ```
 
-## Glossary TODO
+## Glossary
 User
 Server
 container
@@ -484,5 +484,5 @@ thread context
 reference
 
 
-## Installation TODO
+## Installation
 TODO Proguard notes
