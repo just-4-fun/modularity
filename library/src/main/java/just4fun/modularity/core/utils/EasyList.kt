@@ -139,7 +139,7 @@ interface EasyListElement<E: EasyListElement<E>> {
 
 open class EasyList<E: EasyListElement<E>> {
 	var head: E? = null
-	var tail: E? = null
+	private var tail: E? = null
 	
 	fun isEmpty() = head == null
 	fun isNotEmpty() = head != null

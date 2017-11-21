@@ -1,4 +1,4 @@
-package just4fun.modularity.android.demo
+package just4fun.modularity.android.demo.TestMisc
 
 import android.app.Application
 import android.content.Intent
@@ -10,10 +10,11 @@ import android.view.MenuItem
 import just4fun.kotlinkit.log
 import just4fun.kotlinkit.now
 import just4fun.modularity.android.AndroidContainer
-import just4fun.modularity.android.UiModule
+import just4fun.modularity.android.UIModule
 import just4fun.modularity.android.UiModuleReference
-import just4fun.modularity.core.ModuleActivity
-import just4fun.modularity.core.ProgressUtils
+import just4fun.modularity.android.demo.R
+import just4fun.modularity.core.ModuleImplement
+import just4fun.modularity.core.SuspendUtils
 import kotlinx.android.synthetic.main.activity_main.*
 
 class App: Application() {
@@ -31,9 +32,9 @@ class Container(val app: App): AndroidContainer(app) {
 
 
 /*Module*/
-class MainUiModule: UiModule<MainUiModule>(), ModuleActivity {
+class MainUiModule: UIModule<MainUiModule>(), ModuleImplement {
 	override val container: Container = super.container as Container
-	val mainUi: MainActivity? by UiContext()
+	val mainUi: MainActivity? by ActivityReference()
 	
 	fun callUi(msg: String) {
 		mainUi?.fromModule(msg) ?: log("callUi", "'$msg'     IGNORED")
@@ -43,23 +44,23 @@ class MainUiModule: UiModule<MainUiModule>(), ModuleActivity {
 		callUi(msg)
 	}
 	
-	override fun onModuleConstructed() {
+	override fun onConstructed() {
 		log("${this::class.simpleName}", "${hashCode()};   CONSTRUCTED")
 	}
 	
-	override fun onModuleDestroy() {
+	override fun onDestroyed() {
 		log("${this::class.simpleName}", "${hashCode()};   DESTROYED")
 	}
 
-	override fun constructActivity() = this
-	suspend override fun MainUiModule.onActivate(progressUtils: ProgressUtils, isInitial: Boolean) {
+	override fun onCreateImplement() = this
+	suspend override fun SuspendUtils.onActivate(first: Boolean) {
 		val t0 = now() + 1000
-		progressUtils.waitWhile { now() < t0 }
+		waitWhile { now() < t0 }
 		callUi("Call from onActivate should succeed")// WARN ensures running on ui thread
 	}
-	suspend override fun MainUiModule.onDeactivate(progressUtils: ProgressUtils, isFinal: () -> Boolean) {
+	suspend override fun SuspendUtils.onDeactivate(last: () -> Boolean) {
 		val t0 = now() + 1000
-		progressUtils.waitWhile { now() < t0 }
+		waitWhile { now() < t0 }
 	}
 }
 
@@ -68,7 +69,7 @@ class MainUiModule: UiModule<MainUiModule>(), ModuleActivity {
 /*Activity*/
 
 class MainActivity: AppCompatActivity(), UiModuleReference<MainUiModule> {
-	override val module = bindModule(this, MainUiModule::class.java)
+	override val module = bindModule(this, MainUiModule::class)
 	
 	fun fromModule(msg: String) {
 		log("callUi", "'$msg'     OK")

@@ -2,6 +2,13 @@ package just4fun.modularity.core.test.testFeature
 
 import just4fun.modularity.core.test.testFeature.TEventType.*
 import java.lang.System.currentTimeMillis as now
+import org.junit.Test
+
+class TestMatching {
+	@Test fun run() {
+		runTest()
+	}
+}
 
 var UNMATCHED = 0
 
@@ -22,7 +29,7 @@ val events = listOf(
   TEvent(Destroyed, 1, time = 2300)// 13
 )
 
-fun main(args: Array<String>) {
+fun runTest() {
 	TestX("21", true) {
 		__anyOf__ {
 			__skipOver__(2000).Destroyed()

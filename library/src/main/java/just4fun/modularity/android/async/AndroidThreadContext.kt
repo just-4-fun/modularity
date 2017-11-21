@@ -1,28 +1,31 @@
-package just4fun.modularity.android
+package just4fun.modularity.android.async
 
 import android.os.*
-import just4fun.modularity.android.ExecutionContextState.*
+import just4fun.modularity.android.async.ThreadContextState.*
 import just4fun.kotlinkit.async.AsyncTask
-import just4fun.kotlinkit.async.ExecutionContext
-import just4fun.kotlinkit.async.ExecutionContextBuilder
+import just4fun.kotlinkit.async.ThreadContext
+import just4fun.modularity.core.async.ThreadContextBuilder
 import just4fun.kotlinkit.Safely
 import just4fun.kotlinkit.log
+import just4fun.modularity.core.Module
 import java.util.concurrent.RejectedExecutionException
 
 
-open class AndroidExecutionContextBuilder: ExecutionContextBuilder() {
-	val MainHANDLER: ExecutionContext by lazy{ AndroidExecutionContext(true).apply { owner = this }}
-	val newHANDLER: ExecutionContext get() = AndroidExecutionContext(false)
+open class AndroidThreadContextBuilder: ThreadContextBuilder() {
+	/** Single threaded context based on Android [Handler] which runs on the app's Main thread.  */
+	val MAIN: ThreadContext by lazy{ AndroidThreadContext(true).apply { ownerToken = this }}
+	/** Single threaded context based on Android [Handler].  */
+	override fun MONO(ownerToken: Module<*>): ThreadContext = AndroidThreadContext(false).also { it.ownerToken = ownerToken }
 }
 
 
 
-internal enum class ExecutionContextState {RESUMED, PAUSED, SHUTDOWN; }
+internal enum class ThreadContextState {RESUMED, PAUSED, SHUTDOWN; }
 
-/**
+/** Based on Android [Handler].
 WARN: Do not use an instance of this class as a synchronization lock object.
  */
-open class AndroidExecutionContext(val executeInUiThread: Boolean = false): ExecutionContext() {
+open class AndroidThreadContext(val executeInUiThread: Boolean = false): ThreadContext() {
 	private var state = RESUMED
 	private val lock = this
 	private var handler: Handler? = null
@@ -34,7 +37,7 @@ open class AndroidExecutionContext(val executeInUiThread: Boolean = false): Exec
 		if (h.post(task)) count++
 	}
 	
-	override fun onSchedule(task: AsyncTask<*>) = synchronized(lock) {
+	override fun schedule(task: AsyncTask<*>) = synchronized(lock) {
 		if (state == SHUTDOWN) {
 			task.cancel(RejectedExecutionException("Executor has been shutdown"))
 			return
@@ -43,18 +46,18 @@ open class AndroidExecutionContext(val executeInUiThread: Boolean = false): Exec
 		if (h.postAtTime(task, task, task.delayMs + SystemClock.uptimeMillis())) count++
 	}
 	
-	override fun onRemove(task: AsyncTask<*>) = synchronized(lock) {
+	override fun remove(task: AsyncTask<*>) = synchronized(lock) {
 		if (task.isCancelled) {
 			handler?.removeCallbacks(task)
 			if (--count == 0 && state == PAUSED) stopHandler()
 		}
 	}
 	
-	override fun resume() = synchronized(lock) {
+	fun resume() = synchronized(lock) {
 		if (state == PAUSED) state = RESUMED
 	}
 	
-	override fun pause() = synchronized(lock) {
+	fun pause() = synchronized(lock) {
 		if (state == RESUMED) state = PAUSED
 		if (count == 0) stopHandler()
 	}
@@ -73,7 +76,7 @@ open class AndroidExecutionContext(val executeInUiThread: Boolean = false): Exec
 	
 	private fun stopHandler() {
 		// TODO just for test
-		if (count > 0) log("Executor", "WARNING!!!  there are $count  requests unhandled")
+//		if (count > 0) log("Executor", "WARNING!!!  there are $count  requests unhandled")
 		
 		if (executeInUiThread) handler?.removeCallbacksAndMessages(null)
 		else handler?.looper?.quit()
@@ -82,7 +85,7 @@ open class AndroidExecutionContext(val executeInUiThread: Boolean = false): Exec
 	
 	private fun startHandler(): Handler {
 		val looper = if (executeInUiThread) Looper.getMainLooper() else run {
-			val thread = HandlerThread("Handler:$owner")
+			val thread = HandlerThread("Handler:$ownerToken")
 			thread.start()
 			thread.looper
 		}

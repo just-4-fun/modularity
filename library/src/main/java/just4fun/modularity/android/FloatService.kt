@@ -30,9 +30,7 @@ internal enum class FloatState {CREATING, STARTED, STOPPING, DESTROYED }
 
 internal class FloatManager(private val container: AndroidContainer) {
 	private var service: Service? = null
-	private var state = DESTROYED// TODO set/get just for test
-		set(value) = run { field = value; log("Float", state.toString()) }
-		get() = field
+	private var state = DESTROYED//; set(value) = run { field = value; log("Float", state.toString()) }
 	private var notification: Notification? = null
 	private var notificationId: Int = 0
 	private val foreground: Boolean get() = notification != null
@@ -85,21 +83,21 @@ internal class FloatManager(private val container: AndroidContainer) {
 		service = s
 		if (foreground) s.startForeground(notificationId, notification)
 		
-		// TODO REmove
-		if (spamtask == null) {
-			var counter = 0
-			spamtask = AsyncTask(10000) {
-				log("Float", "SPAM;  ${counter++}")
-				spamtask = (this as AsyncTask<*>).runCopy()
-			}
-		}
+//		// TODO REmove
+//		if (spamtask == null) {
+//			var counter = 0
+//			spamtask = AsyncTask(10000) {
+//				log("Float", "SPAM;  ${counter++}")
+//				spamtask = (this as AsyncTask<*>).runCopy()
+//			}
+//		}
 		
 		// todo ???  get onto flags
 		return Service.START_REDELIVER_INTENT
 	}
 	
-	//todo remove
-	var spamtask: AsyncTask<*>? = null
+//	todo remove
+//	var spamtask: AsyncTask<*>? = null
 	
 	fun onDestroy(s: FloatService) = synchronized(lock) {
 		if (service == s) service = null // else what ?
@@ -109,9 +107,9 @@ internal class FloatManager(private val container: AndroidContainer) {
 		}
 		state = DESTROYED
 		
-		//todo remove
-		spamtask?.cancel()
-		spamtask = null
+//		//todo remove
+//		spamtask?.cancel()
+//		spamtask = null
 		
 	}
 }

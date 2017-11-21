@@ -1,11 +1,10 @@
 package just4fun.modularity.core.test.testEndurance
 
 import just4fun.modularity.core.ModuleContainer
-import just4fun.modularity.core.ContainerState
+import just4fun.modularity.core.test.*
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import java.util.concurrent.TimeUnit.MILLISECONDS as ms
-import just4fun.modularity.core.test.*
 
 
 class TContainer: ModuleContainer() {
@@ -13,8 +12,11 @@ class TContainer: ModuleContainer() {
 	private val id = "SYS"
 	private var controller: Thread? = null
 	private var eventsSentCount = AtomicInteger()
-	private val eventHandler = eventChannel(TModule::onModuleEvent)
+	private val eventHandler = feedbackChannel(TModule::onModuleEvent)
 	var overtime = false
+	override public val debugInfo = object: DebugInfo() {
+		override fun debugState(value: ContainerState) = log(3, id, value.toString().toUpperCase())
+	}
 	
 	init {
 		startTime = now()
@@ -33,13 +35,13 @@ class TContainer: ModuleContainer() {
 						Thread.sleep(maxLifeTime * 1000L)
 						overtime = true
 						while (now() < deadLine && !Thread.currentThread().isInterrupted) {
-							log(2, id, "Overtime   Container ;        Left: Regd: ${registered()};   Unregd: ${unregistered()}")
-							log(2, id, registered(true) + "\n" + unregistered(true))
+							log(2, id, "Overtime   Container ;        Left:: ${this.debugInfo.modules()}")
+							log(2, id, this.debugInfo.modules(true))
 							Thread.sleep((maxLifeTime + 5) * 1000L)
 						}
 						if (!Thread.currentThread().isInterrupted) {
-							log(2, id, "Exception Overtime   Killing Container ;        Left: Regd: ${registered()};   Unregd: ${unregistered()}")
-							log(2, id, registered(true) + "\n" + unregistered(true))
+							log(2, id, "Exception Overtime   Killing Container ;        Left:: ${this.debugInfo.modules()}")
+							log(2, id, this.debugInfo.modules(true))
 							System.exit(55)
 						}
 					} catch (x: Throwable) {
@@ -53,11 +55,11 @@ class TContainer: ModuleContainer() {
 						val t = if (restful) 99 else rnd1(maxLifeTime) * 1000
 						lifetime = StrictMath.max(t.toLong(), lifetime)
 						log(2, id, "Launch:  M${ref.id}    lifetime= $t;  ${ref.dumpConfig}")
-						val bond = moduleRef(ref.clas)
-						bond.bind()
+						val bond = moduleReference(ref.klas)
+						bond.bindModule()
 						scheduler.schedule(t) {
-							log(2, id, "Stopping:  M${ref.id}:${ref.module?.triggers()};        Left: Regd: ${registered()};   Unregd: ${unregistered()}")
-							bond.unbind()
+							log(2, id, "Stopping:  M${ref.id}:${ref.module?.debugInfo?.stateBits};        Left: ${this.debugInfo.modules()}")
+							bond.unbindModule()
 						}
 					}
 				}
@@ -88,20 +90,15 @@ class TContainer: ModuleContainer() {
 	}
 	
 	
-	override fun onContainerPopulated() = handle(SystemStartEvent())
-	override fun onContainerEmpty() = handle(SystemStopEvent())
-	override fun debugState(value: ContainerState) = log(3, id, value.toString().toUpperCase())
-	override fun logError(error: Throwable) {
-		if (error.cause is IntendedException) log(1, id, "$error")
-		else logE(1, id, "$error\n${error.stackTrace.take(4).joinToString("\n")}${error.cause?.let { "      Caused by $it\n${it.stackTrace.take(4).joinToString("\n")}" } ?: ""}")
-	}
+	override fun onPopulated() = handle(SystemStartEvent())
+	override fun onEmpty() = handle(SystemStopEvent())
 	
 	/* utils */
 	
 	fun shutdown() = thread {
 		synchronized(memLock) { (memLock as java.lang.Object).notify() }
 		Thread.sleep(100)
-		//		tiker.shutdown(100)// FIXME should not shutdown container's scheduler. it should do itself.in containerTryShutdown
+		//		tiker.shutdown(100)// FIXME should not shutdown container's scheduler. it should do itself.in tryShutdown
 		scheduler.shutdownNow()
 		scheduler.awaitTermination(100, ms)
 		log(2, id, "scheduler Terminated? ${scheduler.isTerminated} ")

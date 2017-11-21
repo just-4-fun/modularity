@@ -1,7 +1,7 @@
 package just4fun.modularity.core.test.testMultisync
 
 import just4fun.modularity.core.multisync.DeadlockException
-import just4fun.modularity.core.multisync.Synt
+import just4fun.modularity.core.multisync.Sync
 import just4fun.modularity.core.test.measureTime
 import kotlin.coroutines.experimental.*
 import java.lang.System.nanoTime as now
@@ -18,7 +18,7 @@ fun main(args: Array<String>) {
 }
 
 var counter = 0
-val synt1 = XSynt()
+val synt1 = XSync()
 fun t0() = measureTime("ASYNC", N) {
 	//1021 ns
 	synt1.ASYNC { counter++ }
@@ -47,7 +47,7 @@ fun t2() = measureTime("lockedOrDiscard", N) {
 //	}
 //}
 
-class XSynt: Synt() {
+class XSync: Sync() {
 	fun ASYNC(code: () -> Unit) {
 		try {
 			synchronized(this) { code() }

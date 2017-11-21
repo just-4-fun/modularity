@@ -1,15 +1,22 @@
 package just4fun.modularity.core.test.testEndurance
 
-import just4fun.modularity.core.test.deadline
-import just4fun.modularity.core.test.debug
-import just4fun.modularity.core.test.durationSec
+import just4fun.kotlinkit.measuredStats
+import just4fun.modularity.core.BaseModule
+import just4fun.modularity.core.test.*
+import org.junit.Test
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import kotlin.concurrent.thread
+import kotlin.reflect.full.isSubclassOf
 import java.lang.System.currentTimeMillis as now
-import java.util.concurrent.TimeUnit.MILLISECONDS as ms
 import java.lang.Thread.currentThread as cThread
+import java.util.concurrent.TimeUnit.MILLISECONDS as ms
 
-val lock = Any()
+
+class Test {
+	@Test fun run() {
+		main(emptyArray())
+	}
+}
 
 fun main(args: Array<String>) {
 	val sys = TContainer()
@@ -53,9 +60,3 @@ class M6: TModule()
 class M7: TModule()
 class M8: TModule()
 class M9: TModule()
-
-
-//class ThreadInfo(val id: Int) {
-//	override fun toString() = "T"+(if (id<10) "0" else "")+id
-//}
-

@@ -1,16 +1,17 @@
 package just4fun.modularity.core.test.testEndurance
 
+import just4fun.modularity.core.Module
 import just4fun.modularity.core.test.rnd
 import just4fun.modularity.core.test.rnd0
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.reflect.KClass
 
 
 val bindLock = Any()
 
 class TModuleRef(val id: Int) {
 	private val lock = Any()
-	val clas = Class.forName("$packageName.M$id") as Class<TModule>
-	val klas = clas.kotlin
+	val klas = (Class.forName("$packageName.M$id") as Class<TModule>).kotlin
 	var level = 0
 	var module: TModule? = null
 	var predec: TModule? = null

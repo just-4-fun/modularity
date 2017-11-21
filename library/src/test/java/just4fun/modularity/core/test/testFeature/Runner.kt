@@ -1,7 +1,15 @@
 package just4fun.modularity.core.test.testFeature
 
+import org.junit.Test
+
+class TestFeatures {
+	@Test fun run() {
+		main(emptyArray())
+	}
+}
+
 // 0 - empty console; 1 - console with commands; 10 - run any tests; 100 - run all tests
-val mode = 100
+val mode = 0
 val commands = StringBuilder()
 infix operator fun StringBuilder.plus(cmds: String) = commands.append(" ").append(cmds)
 
@@ -56,7 +64,7 @@ fun main(args: Array<String>) {
 			  Test(213, "Available events no time", "< 1u > 1[n6 < 1u > 1[n5 < 1bs2 > 1[n0 1s 2a- 2a 1s-") {
 				  __0__.Active(2).__0__.Active(1).__0__.Xecute(1, 1, 1).__0__.Xecute(1, 2, 1).__0__.Destroyed(1).__0__.Destroyed(2)
 			  },
-			  Test(212, "BindKA than Rebind at active", "< 1bs2 > 1[n0 2[r 1s 1b2 ///1500 1s-") {
+			  Test(212, "BindKA than Rebind at isReady", "< 1bs2 > 1[n0 2[r 1s 1b2 ///1500 1s-") {
 				  __0__.Active(2).__0__.Active(1).Deactivating(2).Passive(2).Deactivating(1).Passive(1)
 			  },
 			  Test(211, "BindKA than Rebind at start", "< 1bs2 > 1[n0 2[ao1 1s 1b2 ///1500 1s-") {

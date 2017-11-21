@@ -23,8 +23,8 @@ val unavailIndex = 33
 
 class TContainer(val delays: IntArray): ModuleContainer() {
 	val size = delays.size
-	val bond = moduleRef(TModule::class.java)
-	val module = bond.bind().valueOrThrow
+	val bond = moduleReference(TModule::class)
+	val module = bond.bindModule()
 	var cursor = 0
 	val tops = IntArray(size)
 	val bots = IntArray(size)
@@ -32,9 +32,9 @@ class TContainer(val delays: IntArray): ModuleContainer() {
 	var lastUpdate = now()
 	
 	fun next() {
-		if (cursor == size) run{ exit(); return }
+		if (cursor == size) run { exit(); return }
 		val rid = "[$cursor]:${delays[cursor]}"
-		val delay  = delays[cursor]
+		val delay = delays[cursor]
 		AsyncTask(delay * 100) {
 			setTop()
 			use { module.use(rid) }
@@ -51,29 +51,30 @@ class TContainer(val delays: IntArray): ModuleContainer() {
 	
 	fun setTop() {
 		val now = now()
-		tops[cursor] = (now  - lastUpdate).toInt()
+		tops[cursor] = (now - lastUpdate).toInt()
 		if (bots[cursor] == 0) mids[cursor] = 0 else mids[cursor] = tops[cursor]
 		println("-                                                    [$cursor]: ${bots[cursor]} < ${mids[cursor]} < ${tops[cursor]}")
 		lastUpdate = now
 		cursor++
 	}
+	
 	fun setBottom() {
 		val now = now()
-		bots[cursor] = (now  - lastUpdate).toInt() + 1
+		bots[cursor] = (now - lastUpdate).toInt() + 1
 		println("-                                                    MID[${cursor}]= ${bots[cursor]}")
 	}
 	
 	fun exit() {
-		stopAllModules()
+		startQuitting()
 		AsyncTask(100) {
-			if (!containerTryShutdown()) exit() else onExit()
+			if (!tryShutdown()) exit() else onExit()
 		}
 	}
 	
 	fun onExit() {
-		println(tops.map { it/100 }.joinToString(","))
-		println(mids.map { it/100 }.joinToString(","))
-		println(bots.map { it/100 }.joinToString(","))
+		println(tops.map { it / 100 }.joinToString(","))
+		println(mids.map { it / 100 }.joinToString(","))
+		println(bots.map { it / 100 }.joinToString(","))
 		println()
 //		println((module.restCalc as? RestCalc)?.durations?.joinToString(","))
 	}
@@ -83,37 +84,36 @@ class TContainer(val delays: IntArray): ModuleContainer() {
 
 /**/
 
-class TModule: Module<TModule>(), ModuleActivity {
+class TModule: Module<TModule>(), ModuleImplement {
 	val id = "M1"
 	override val container: TContainer = super.container as TContainer
+	override public val debugInfo = object: DebugInfo() {
+		override fun debugState(bit: StateBit, value: Boolean, option: SetOption, execute: Boolean, changed: Boolean) {
+			if (debug == 0) log(0, id, "${if (execute) "- - - - - - - - - - -" else ">"} :  $bit = $value")
+			else if (debug == 1 && (execute || changed)) log(1, id, "- - - - - - - - - - - :  $bit = $value")
+			if (value && execute && bit in StateBit.states()) {
+				if (debug <= 3) log(3, id, "_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _  $bit")
+				//			handle(trigger)
+			}
+		}
+	}
 	
 	init {
 		setRestful(500, 500)
 	}
 	
 	suspend fun use(rid: Any) {
-		executeWhenActiveS {
+		implement.runSuspend {
 			log(2, id, "Executing  $rid")
 		}
 	}
 	
-	fun available(ok: Boolean) = if (ok) enable() else disable(Exception())
+	fun available(ok: Boolean) = if (ok) enable() else disable()
 	
 	
-	override fun constructActivity(): TModule = this
-	suspend override fun TModule.onActivate(progressUtils: ProgressUtils, isInitial: Boolean) = Unit
-	suspend override fun TModule.onDeactivate(progressUtils: ProgressUtils, isFinal: () -> Boolean) {
-		container.setBottom()
-	}
-	override fun debugState(factor: StateFactor, value: Boolean, option: TriggerOption, execute: Boolean, changed: Boolean) {
-		if (debug == 0) log(0, id, "${if (execute) "- - - - - - - - - - -" else ">"} :  $factor = $value")
-		else if (debug == 1 && (execute || changed)) log(1, id, "- - - - - - - - - - - :  $factor = $value")
-		if (value && execute && factor in StateFactor.phases()) {
-			if (debug <= 3) log(3, id, "_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _  $factor")
-			//			handle(trigger)
-		}
-	}
-	
+	override fun onCreateImplement(): TModule = this
+	suspend override fun SuspendUtils.onActivate(first: Boolean) = Unit
+	suspend override fun SuspendUtils.onDeactivate(last: () -> Boolean) = container.setBottom()
 }
 
 

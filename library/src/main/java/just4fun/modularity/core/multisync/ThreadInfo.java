@@ -17,10 +17,10 @@ public static ThreadLocal<ThreadInfo> info = new ThreadLocal<ThreadInfo>() {
 };
 
 int id = 0;
-Synt waitOn;
+Sync waitOn;
 boolean waiting;
 int priority;
-OnDeadlock resolution;
+boolean tamper;
 long order = 0L;
 private ThreadInfo prev = null;
 private ThreadInfo next = null;
@@ -28,7 +28,7 @@ private ThreadInfo next = null;
 // int doneCount = 0;// TODO for test
 // int oopsCount = 0;// TODO for test
 
-@Override public String toString() { return id+""; }
+@Override public String toString() { return id + ""; }
 
 public ThreadInfo(int id) {
 	this.id = id;
@@ -38,8 +38,7 @@ public ThreadInfo(int id) {
 }
 
 boolean outranks(ThreadInfo other) {
-	return resolution.ordinal() > other.resolution.ordinal() ||
-			(resolution.ordinal() == other.resolution.ordinal() && priority >= other.priority);
+	return (!tamper && other.tamper) || (tamper == other.tamper && priority >= other.priority);
 }
 
 @Nullable @Override public ThreadInfo getNext() { return next; }

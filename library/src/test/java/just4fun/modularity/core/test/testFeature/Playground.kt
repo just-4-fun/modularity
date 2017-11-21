@@ -34,12 +34,12 @@ class Playground {
 		when (cmd) {
 			"s" -> session.container.startModule(cls1, if (n2 == 0) null else n2)
 			"s-" -> session.container.stopModule(cls1, if (n2 == 0) null else n2)
-			"R" -> session.moduleRef(cls1).bind()
-			"Ru" -> session.moduleRef(cls1).use(if (n2 == 0)  session.container.ExecutionContexts.NONE else session.container.ExecutionContexts.SHARED) { Thread.sleep(100); useAsync() }
-			"R-" -> session.moduleRef(cls1).unbind()
-			"b" -> m1?.testBind(cls2.kotlin, false)
-			"bs" -> m1?.testBind(cls2.kotlin, true)
-			"b-" -> m1?.testUnbind(cls2.kotlin)
+			"R" -> session.moduleRef(cls1).bindModule()
+			"Ru" -> session.moduleRef(cls1).runWithModule(if (n2 == 0)  null else session.container.ThreadContexts.CONTAINER) { Thread.sleep(100); useAsync() }
+			"R-" -> session.moduleRef(cls1).unbindModule()
+			"b" -> m1?.testBind(cls2, false)
+			"bs" -> m1?.testBind(cls2, true)
+			"b-" -> m1?.testUnbind(cls2)
 			"b--" -> m1?.testUnbindAll()
 			"r" -> m1?.testSetRestful(if (n2 > 0) n2 else 4000)
 			"r-" -> m1?.testSetRestless()
@@ -58,7 +58,7 @@ class Playground {
 			"/=" -> session.parallel = true
 			"/=-" -> session.parallel = false
 		//
-			"[e" -> cfg1.executor = n2 // -1 - uses parallel option; 0 - NONE; 1- single threaded; 2 - SHARED; 3.. - CUSTOM with 3.. threads
+			"[e" -> cfg1.executor = n2 // -1 - uses parallel option; 0 - NONE; 1- single threaded; 2 - CONTAINER; 3.. - CUSTOM with 3.. threads
 			"[r" -> run { cfg1.startRestful = true; if (n2 > 0) cfg1.restDelay = n2 }
 			"[r-" -> cfg1.startRestful = false
 			"[f" -> cfg1.hasFinalizing = true
@@ -76,7 +76,6 @@ class Playground {
 			"debug" -> debugLevel = n2
 			"fun" -> println("--------  FUN  ---------")
 			"boom" -> throw BoomException("--------  BOOM  ---------")
-			"canBind" -> session.container.moduleRef(WrongModule::class.java).use { bind() }
 			else -> println("-> !!! Unrecognized command: $cmd")
 		}
 		return true

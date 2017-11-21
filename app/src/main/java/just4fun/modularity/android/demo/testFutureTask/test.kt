@@ -2,9 +2,9 @@ package just4fun.modularity.android.app.testFutureTask
 
 import just4fun.modularity.android.demo.rnd
 import just4fun.modularity.android.demo.rnd0
-import just4fun.modularity.android.AndroidExecutionContext
+import just4fun.modularity.android.async.AndroidThreadContext
 import just4fun.kotlinkit.async.AsyncTask
-import just4fun.kotlinkit.async.DefaultExecutionContext
+import just4fun.kotlinkit.async.DefaultThreadContext
 import just4fun.kotlinkit.async.TaskContext
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
@@ -16,7 +16,7 @@ import java.lang.System.currentTimeMillis as now
 val duration = 10000
 val deadline = duration + now()
 val maxDelay = 100
-val S = AndroidExecutionContext(false)
+val S = AndroidThreadContext(false)
 val tasks = mutableListOf<ATask>()
 val IDs = AtomicInteger()
 var successes = AtomicInteger()
@@ -24,8 +24,8 @@ var successes = AtomicInteger()
 object Test {
 	
 	fun run() {
-//				FutureTask.scheduler = AndroidExecutionContext(false)
-		AsyncTask.sharedContext = DefaultExecutionContext()
+//				FutureTask.scheduler = AndroidThreadContext(false)
+		AsyncTask.sharedContext = DefaultThreadContext()
 		println("TESTING........................ !!!!!!!!!!!")
 		runTaskPool()
 		runTaskPool()
@@ -80,7 +80,7 @@ class ATask(val id: Int, val delay:Int, executor: Executor?, code: TaskContext.(
 	init {
 		tasks.add(this)
 		onComplete {
-			if (it.hasValue) successes.incrementAndGet()
+			if (it.isSuccess) successes.incrementAndGet()
 			tasks.remove(this)
 		}
 	}

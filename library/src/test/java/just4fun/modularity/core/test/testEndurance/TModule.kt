@@ -3,7 +3,7 @@ package just4fun.modularity.core.test.testEndurance
 import just4fun.kotlinkit.Result
 import just4fun.kotlinkit.flatten
 import just4fun.modularity.core.*
-import just4fun.kotlinkit.async.ExecutionContext
+import just4fun.kotlinkit.async.ThreadContext
 import just4fun.kotlinkit.async.AsyncResult
 import just4fun.kotlinkit.async.SuspendTask
 import just4fun.kotlinkit.Safely
@@ -15,11 +15,11 @@ import kotlin.coroutines.experimental.*
 import java.lang.System.currentTimeMillis as now
 import java.util.concurrent.TimeUnit.MILLISECONDS as ms
 
-enum class ExecutorOption {None, System, Single, Multy }
+enum class ExecutorOption { None, System, Single, Multy }
 
 
 
-open class TModule: Module<TModule.TActivity>() {
+open class TModule: Module<TModule.TImplement>() {
 	private val asyncRequestCount = AtomicInteger()
 	private val asyncResponseCount = AtomicInteger()
 	private var syncRequestCount = AtomicInteger()
@@ -32,23 +32,34 @@ open class TModule: Module<TModule.TActivity>() {
 	override val container: TContainer = super.container as TContainer
 	val id = javaClass.simpleName.substring(1).toInt()
 	val ref = moduleRefs[id]
-	override val executionContext: ExecutionContext? = when (ref.executorOption) {
-		ExecutorOption.None -> ExecutionContexts.NONE
-		ExecutorOption.System -> ExecutionContexts.SHARED
-		ExecutorOption.Single -> ExecutionContexts.newPOOL()
-		ExecutorOption.Multy -> ExecutionContexts.newPOOL(4)
-	}
 	override val moduleName = id.toString()
-	private val eventHandler = eventChannel(TModule::onModuleEvent)
+	private val eventHandler = feedbackChannel(TModule::onModuleEvent)
 	private val cancels = ArrayList<TCancellation>()
-	private var isActive = false
+	private var active = false
 	private var dontDisturb = false
 	private var tampered = false
 	val isPrime get() = ref.isActiveModule(this)
-	val prnCancels get() = withCancels { "Stuck with  ${it.size}  requests  ${it.map { "${it.id}" }.joinToString()}" }
+	val prnStuckedCancels get() = withCancels { "Stuck with  ${it.size}  requests  ${it.map { "${it.id}" }.joinToString()}" }
 	private inline fun <T> withCancels(f: (MutableList<TCancellation>) -> T): T = synchronized(cancels) { f(cancels) }
 	
-	
+	override public val debugInfo: DebugInfo = object: DebugInfo() {
+		override fun debugState(bit: StateBit, value: Boolean, option: SetOption, execute: Boolean, changed: Boolean) {
+			if (debug == 0) log(0, id, "${if (execute) "- - - - - - - - - - -" else ">"} :  $bit = $value")
+			else if (debug == 1 && (execute || changed)) log(1, id, "- - - - - - - - - - - :  $bit = $value")
+			if (value && execute && bit in StateBit.states()) {
+				if (debug <= 3) log(3, id, "_ _ _ _ _ _ _ _ _ _ _ _ _    $stateBits         $bit")
+				//			handle(trigger)
+			}
+		}
+		
+		override fun onUnhandledError(cause: Throwable) {
+			super.onUnhandledError(cause)
+			when (cause) {
+				is ModuleActivationException -> handle(ActivationFinishEvent(cause))
+				is ModuleDeactivationException -> handle(DeactivationFinishEvent(cause))
+			}
+		}
+	}
 	
 	init {
 		init()
@@ -88,44 +99,44 @@ open class TModule: Module<TModule.TActivity>() {
 	private val rndBound get():TModule? = rnd(ref.boundRefs)?.let { if (ref.unbounding.contains(it.id)) null else it.module }
 	
 	private fun doSomething() {
-		if (!isActive || !isPrime || container.overtime) return
+		if (!active || !isPrime || container.overtime) return
 		when (rnd0(100)) {
 			in 0..60 -> rndBound?.let { requestAsync(it) }
 			in 61..75 -> rndBound?.let { requestSync(it) }
 			in 76..78 -> rndBound?.let { requestAsyncSeries(it) }
 			in 79..80 -> sendEvent()
-			in 81..82 -> if (restful && !dontDisturb) {
+			in 81..82 -> if (isRestful && !dontDisturb) {
 				dontDisturb = true
 				log(2, id, "#> dontDisturb")
 				scheduler.schedule(ref.restDelay) { log(2, id, "#x dontDisturb"); dontDisturb = false }
 			}
 			88 -> if (!tampered) {
 				tampered = true
-				if (restful) {
+				if (isRestful) {
 					restless()
-					log(2, id, "#> Restful  ${restful}")
-					scheduler.schedule(rnd1(20) * 100) { tampered = false;restful(rnd0(10) * 100);log(2, id, "#x Restless  ${restful}") }
+					log(2, id, "#> Restful  ${isRestful}")
+					scheduler.schedule(rnd1(20) * 100) { tampered = false;restful(rnd0(10) * 100);log(2, id, "#x Restless  ${isRestful}") }
 				} else {
 					restful(rnd0(10) * 100)
-					log(2, id, "#> Restless  ${restful}")
-					scheduler.schedule(rnd1(20) * 100) { tampered = false; restless();log(2, id, "#x Restful  ${restful}") }
+					log(2, id, "#> Restless  ${isRestful}")
+					scheduler.schedule(rnd1(20) * 100) { tampered = false; restless();log(2, id, "#x Restful  ${isRestful}") }
 				}
 			}
 			in 89..90 -> if (!tampered) {
 				tampered = true
 				val cancel = rnd.nextBoolean()
-				log(2, id, "# UNAVAILABLE   cancelRqs? $cancel")
 				unavailable(Exception("just for fun"), cancel)
-				scheduler.schedule(rnd1(20) * 100) { log(2, id, "# AVAILABLE    ${triggers()}"); available(); tampered = false }
+				log(2, id, "# UNAVAILABLE   cancelRqs? $cancel;      ${debugInfo.stateBits}")
+				scheduler.schedule(rnd1(20) * 100) { available(); log(2, id, "# AVAILABLE    ${debugInfo.stateBits}"); tampered = false }
 			}
 			91 -> rndBound?.let {
 				val ka = rnd.nextBoolean()
 				log(2, id, "# rebinding  $it  ka= $ka")
-				bind(it.javaClass.kotlin, ka, null)
+				bind(it::class, null, ka)
 			}
 			92 -> if (container.timeLeft > 100) bindAny(true)
-			93 ->withCancels{ rnd(it) }?.let { val ir = !rndChance(3); it.cc.cancel(Exception("# Request ${it.id} cancelled; Interrupt? $ir"), ir) }
-			in 94..95 -> if (!enabled && !tampered) run { log(2, id, "# RESTORE UNAVAILABLE:   ${triggers()}"); available() }
+			93 -> withCancels { rnd(it) }?.let { val ir = !rndChance(3); it.cc.cancel(Exception("# Request ${it.id} cancelled; Interrupt? $ir"), ir) }
+			in 94..95 -> if (!isEnabled && !tampered) run { log(2, id, "# RESTORE UNAVAILABLE:   ${debugInfo.stateBits}"); available() }
 			96 -> container.sendEvent()
 		}
 		//
@@ -133,7 +144,7 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	private fun doSomethingElse(id: Any) {
-		if (!isActive || container.overtime) return
+		if (!active || container.overtime) return
 		when (rnd0(10)) {
 			in 0..5 -> Safely({ Thread.sleep(rnd1(100).toLong()) }, { log(2, id, "doSomethingElse: sleep interrupted") })
 			in 6..8 -> doSomething()
@@ -142,8 +153,8 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	//	private fun startFlow() {
-	//		if (!isActive || container.overtime) return
-	//		(executionContext ?: RestfulExecutor.SHARED).execute { doSomething() }
+	//		if (!active || container.overtime) return
+	//		(context ?: RestfulExecutor.CONTAINER).execute { doSomething() }
 	//		scheduler.schedule(rnd0(50)) { startFlow() }
 	//	}
 	
@@ -153,33 +164,36 @@ open class TModule: Module<TModule.TActivity>() {
 	//	override fun onModuleUnbound() = handle(UnboundEvent())
 	//	override fun onModuleOutOfWork() = handle(OutOfWorkEvent())
 	
-	override fun onModuleConstructed() {
+	override fun onCreateThreadContext(): ThreadContext? {
+		//		log(this, "cxt parallel? ${cfg.parallel}")
+		return when (ref.executorOption) {
+			ExecutorOption.None -> null
+			ExecutorOption.System -> container.ThreadContexts.CONTAINER
+			ExecutorOption.Single -> container.ThreadContexts.MULTI(this)
+			ExecutorOption.Multy -> container.ThreadContexts.MULTI(this, 4)
+		}
+	}
+	
+	override fun onConstructed() {
 		handle(ConstructedEvent())
-		if (rndChance(60)) run { log(2, id, "#  FAILED CONSTRUCT"); throw IntendedException("Failed Construct of M$id") }
 		doSomethingElse("onModuleConstructed")
 	}
 	
-	override fun onServiceDisability(m: Module<*>, enabled: Boolean) {
-		handle(BoundAvailableEvent(m as TModule, enabled))
-		doSomethingElse("onAvailabilityChange: ${m.id} ? $enabled")
+	override fun onBoundModuleDisability(m: BaseModule, disabled: Boolean) {
+		handle(BoundAvailableEvent(m as TModule, disabled))
+		doSomethingElse("onAvailabilityChange: ${m.id} ${if (disabled) "X" else "+"}")
 	}
 	
-	suspend override fun TActivity.onActivate(progressUtils: ProgressUtils, isInitial: Boolean) = startProgress(progressUtils, true)
-	suspend override fun TActivity.onDeactivate(progressUtils: ProgressUtils, isFinal: () -> Boolean) {
-		if (ref.needFinalizing) isFinal()
-		startProgress(progressUtils, false)
-	}
-	
-	private suspend fun startProgress(builder: ProgressUtils, activating: Boolean) {
+	private suspend fun startProgress(builder: SuspendUtils, activating: Boolean) {
 		val backoff = { durationMs: Long -> if (durationMs < 2000) 200 else 1000 }
 		val timeout = now() + if (activating) ref.activateDelay else ref.deactivateDelay
 		val opt = if (activating) ref.activateOpt else ref.deactivateOpt
 		handle(if (activating) ActivationStartEvent() else DeactivationStartEvent())
-		if (activating) run { isActive = true; doSomething() }
-		//		if (activating) run { isActive = true; startFlow() }
+		if (activating) run { active = true; doSomething() }
+		//		if (activating) run { active = true; startFlow() }
 		when (opt) {
 			0 -> Unit
-			1 -> builder.waitWhile(backoff) { now() < timeout }
+			1 -> builder.waitWhile(backoff = backoff) { now() < timeout }
 			2 -> suspendCoroutine<Unit> { compl ->
 				val delay = (timeout - now()).let { if (it > 0) it else 0 }.toInt()
 				scheduler.schedule(delay) { compl.resume(Unit) }
@@ -187,39 +201,30 @@ open class TModule: Module<TModule.TActivity>() {
 			else -> Unit
 		}
 		//
-		if (!activating) isActive = false
-		if (!activating && withCancels{it.isNotEmpty()}) {
-			log(2, id, prnCancels)
+		if (!activating) active = false
+		if (!activating && withCancels { it.isNotEmpty() }) {
+			log(2, id, prnStuckedCancels)
 			val t0 = now() + 1000
 			val t1 = now() + 1000 * 40
 			builder.waitWhile {
-				if (withCancels{it.isEmpty()}) false else {
-					if (now() > t1) killProcess("Module $this $prnCancels")
+				if (withCancels { it.isEmpty() }) false else {
+					if (now() > t1) killProcess("Module $this $prnStuckedCancels")
 					else if (now() > t0) {
-						log(2, id, prnCancels)
-						destroying || !ref.needFinalizing || !enabled
+						log(2, id, prnStuckedCancels)
+						!isAlive || !ref.needFinalizing || !isEnabled
 					} else true
 				}
 			}
 		}
 		handle(if (activating) ActivationFinishEvent(null) else DeactivationFinishEvent(null))
-		if (rndChance(50)) run { log(2, id, "#  FAILED PROGRESS"); throw IntendedException("Failed Progress of M$id") }
 	}
 	
-	override fun onModuleDestroy() {
+	override fun onDestroyed() {
 		handle(DestroyEvent())
 		ref.moduleDestroyed(this)
 		val evs = events.toTypedArray()
-		log(2, id, "${ref.dumpConfig}\nSTAT:: asyncRq= $asyncRequestCount;  asyncResp= $asyncResponseCount;  syncRq= $syncRequestCount;  syncResp= $syncResponseCount;  evSent= $eventsSentCount;  evReceived= $eventsReceivedCount\n${evs.joinToString("  ")}\nSYS modules left: Regd: ${sys.registered()};   Unregd: ${sys.unregistered()}")
-		withCancels{if (it.isNotEmpty()) logE(2, id, prnCancels) }// Could be if is requested inabout last moment
-	}
-	
-	override fun logDisabilityEvent(cause: Throwable) {
-		super.logDisabilityEvent(cause)
-		when (cause) {
-			is ModuleActivationException -> handle(ActivationFinishEvent(cause))
-			is ModuleDeactivationException -> handle(DeactivationFinishEvent(cause))
-		}
+		log(2, id, "${ref.dumpConfig}\nSTAT:: asyncRq= $asyncRequestCount;  asyncResp= $asyncResponseCount;  syncRq= $syncRequestCount;  syncResp= $syncResponseCount;  evSent= $eventsSentCount;  evReceived= $eventsReceivedCount\n${evs.joinToString("  ")}\nSYS modules left: ${container.debugInfo.modules()}")
+		withCancels { if (it.isNotEmpty()) logE(2, id, prnStuckedCancels) }// Could be if is requested inabout last moment
 	}
 	
 	/* controls */
@@ -233,10 +238,10 @@ open class TModule: Module<TModule.TActivity>() {
 			val ka = rndChance(3)
 			val time = if (unbind) container.timeLeft.let { if (it > 10) it else 10 } else 0
 			log(2, id, "# binding to M$n    KA: $ka;  ${nRef.dumpConfig};  ${if (unbind) "X: $time" else ""}")
-			val result = bind(nRef.klas, ka, null).onFailure { nRef.removeBinder(ref) }.onValue {
+			val result = Result { bind(nRef.klas, null, ka) }.onFailure { nRef.removeBinder(ref) }.onSuccess {
 				if (unbind) container.timeLeft.let { scheduler.schedule(rnd1(if (it > 10) it else 10)) { unbind(nRef.id) } }
 			}
-			handle(ModuleBoundEvent(nRef, result.failureOrNull))
+			handle(ModuleBoundEvent(nRef, result.exception))
 			nRef
 		} else {
 			log(2, id, "# can't bindAny to M$n")
@@ -257,7 +262,7 @@ open class TModule: Module<TModule.TActivity>() {
 		}
 	}
 	
-	private fun expectsFrom(mid: Int) = withCancels{it.any { it.m.id == mid }}
+	private fun expectsFrom(mid: Int) = withCancels { it.any { it.m.id == mid } }
 	
 	
 	fun unbindAlll() {
@@ -268,20 +273,11 @@ open class TModule: Module<TModule.TActivity>() {
 	fun restless() = setRestless()
 	fun restful(delay: Int) = setRestful(delay, ref.restDuration)
 	fun available() = enable()
-	fun unavailable(reason: Throwable, cancelRs: Boolean) = disable(reason, cancelRequests = cancelRs)
+	fun unavailable(reason: Throwable, cancelRs: Boolean) = disable(cancelRs)
 	
 	/* utils */
 	
-	override fun constructActivity(): TActivity = TActivity()
-	
-	override fun debugState(factor: StateFactor, value: Boolean, option: TriggerOption, execute: Boolean, changed: Boolean) {
-		if (debug == 0) log(0, id, "${if (execute) "- - - - - - - - - - -" else ">"} :  $factor = $value")
-		else if (debug == 1 && (execute || changed)) log(1, id, "- - - - - - - - - - - :  $factor = $value")
-		if (value && execute && factor in StateFactor.phases()) {
-			if (debug <= 3) log(3, id, "_ _ _ _ _ _ _ _ _ _ _ _ _    ${triggers()}         $factor")
-			//			handle(trigger)
-		}
-	}
+	override fun onCreateImplement(): TImplement = TImplement()
 	
 	override fun toString() = "M$id"
 	
@@ -305,7 +301,7 @@ open class TModule: Module<TModule.TActivity>() {
 		// whatever
 	}
 	
-	fun responseSync(mid: String, m: TModule): Result<Int> = executeIfActive { useSync(mid, m) }
+	fun responseSync(mid: String, m: TModule): Result<Int> = implement.runIfReady { useSync(mid, m) }
 	private fun requestSync(m: TModule): Result<Int> {
 		val rid = "$id-${m.id}-${syncRequestCount.incrementAndGet()}"
 		val result = m.responseSync(rid, m)
@@ -316,25 +312,25 @@ open class TModule: Module<TModule.TActivity>() {
 	private fun requestAsyncSeries(m: TModule) = repeat(rnd1(10)) { requestAsync(m)/* todo ? in parallel*/ }
 	
 	private fun requestAsync(m: TModule) {
-		if (m.dead) log(1, id, "Module $this requests dead module $m")
+		if (!m.isAlive) log(1, id, "Module $this requests dead module $m")
 		if (m.dontDisturb) return
 		val rid = "$id-${m.id}-${asyncRequestCount.incrementAndGet()}"
-		val cc: AsyncResult<Result<Int>> = executeSuspension {
+		val cc: AsyncResult<Result<Int>> = suspension {
 			handle(AsyncRequestStartEvent(rid))
 			m.responseAsync(rid)
 		}
 		val cancellation = TCancellation(rid, m, cc as SuspendTask<Result<Int>>)
-		withCancels{it.add(cancellation)}
+		withCancels { it.add(cancellation) }
 		cc.onComplete {
 			handle(AsyncRequestEndEvent(cancellation, it.flatten()))
-			withCancels{it.remove(cancellation)}
+			withCancels { it.remove(cancellation) }
 		}
 	}
 	
 	suspend fun responseAsync(id: String): Result<Int> {
 		return when (rndChance(4)) {
-			true -> executeWhenActiveS { useAsyncLong(id) }
-			false -> executeWhenActiveS { useAsync(id) }
+			true -> implement.runSuspend { useAsyncLong(id) }
+			false -> implement.runSuspend { useAsync(id) }
 		}
 	}
 	
@@ -346,11 +342,13 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	
-	/* ACTIVITY */
+	/* Implement */
 	
-	inner class TActivity: ModuleActivity {
-		init {
-			if (rndChance(20)) run { log(2, id, "#  FAILED ACTIVITY"); throw IntendedException("Failed Activity of M$id") }
+	inner class TImplement: ModuleImplement {
+		suspend override fun SuspendUtils.onActivate(first: Boolean) = startProgress(this, true)
+		suspend override fun SuspendUtils.onDeactivate(last: () -> Boolean) {
+			if (ref.needFinalizing) last()
+			startProgress(this, false)
 		}
 		
 		fun useSync(mid: String, m: TModule): Int {
@@ -372,7 +370,7 @@ open class TModule: Module<TModule.TActivity>() {
 		}
 		
 		suspend fun useAsyncLong(id: String): Int = suspendCoroutine { sc ->
-			(executionContext ?: ExecutionContexts.SHARED).execute {
+			container.ThreadContexts.CONTAINER.execute {
 				try {
 					val result = asyncResponseCount.incrementAndGet()
 					Thread.sleep(rnd1(100).toLong())
@@ -408,7 +406,7 @@ open class TModule: Module<TModule.TActivity>() {
 	
 	inner class ModuleUnboundEvent(val bRef: TModuleRef): InternalEvent() {
 		override fun details(): String {
-			return "$this ${bRef.id};   that is still bound by: ${bRef.binderRefs.map { it.toString() }.joinToString()};   actual: ${bRef.module?.dumpBinders()}"
+			return "$this ${bRef.id};   that is still bound by: ${bRef.binderRefs.map { it.toString() }.joinToString()};   actual: ${bRef.module?.debugInfo?.userModules}"
 		}
 		
 		override fun toString() = "\u29EC"//⧬
@@ -431,9 +429,9 @@ open class TModule: Module<TModule.TActivity>() {
 		override fun toString() = "\u2731"//✱
 	}
 	
-	inner class BoundAvailableEvent(val m: TModule, val available: Boolean): InternalEvent() {
+	inner class BoundAvailableEvent(val m: TModule, val disabled: Boolean): InternalEvent() {
 		override fun details() = "$this ${m.id}"
-		override fun toString() = if (available) "!" else "?"
+		override fun toString() = if (disabled) "?" else "!"
 	}
 	
 	inner class ConstructedEvent: InternalEvent() {
@@ -461,7 +459,7 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	inner class SyncRequestEvent(val id: String, val m: TModule, val result: Result<Int>): InternalEvent() {
-		override fun details() = "$this $id  ${(result as? Result.Failure)?.failure?.toString() ?: ""}"
+		override fun details() = "$this $id  ${result?.exception?.toString() ?: ""}"
 		//		override fun toString() = "<x"//↑
 		override fun toString() = "\u2191"//↑
 	}
@@ -479,8 +477,8 @@ open class TModule: Module<TModule.TActivity>() {
 	}
 	
 	inner class AsyncRequestEndEvent(val c: TCancellation, val result: Result<Int>): InternalEvent() {
-		val exception: Throwable? = result.failureOrNull
-		override fun details() = "$this ${c.id}   ${if (exception == null) "" else "${exception.javaClass.simpleName.dropLast(5)}: ${exception.message};  ${exception.cause?.toString() ?: ""}"}"//\n${failure.printStackTrace()}"}"
+		val exception: Throwable? = result.exception
+		override fun details() = "$this ${c.id}   ${if (exception == null) "" else "${exception.javaClass.simpleName.dropLast(5)}: ${exception.message};  ${exception.cause?.toString() ?: ""}"}"//\n${exception.printStackTrace()}"}"
 		//		override fun toString() = "v"//⇓
 		override fun toString() = "\u21D3"//⇓
 	}
@@ -516,5 +514,3 @@ class TCancellation(val id: String, val m: TModule, val cc: SuspendTask<*>) {
 		return true
 	}
 }
-
-class IntendedException(msg: String): Exception(msg)
