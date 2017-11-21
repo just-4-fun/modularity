@@ -105,7 +105,8 @@ Since then the application can exit the process or wait the next request for sta
 - To start the application get a “main” module reference, and call its `bind` method
 - To finish the application call the reference’s `unbind` method  
 
-TODO ![App lifecycle](https://....jpg)   
+![App lifecycle](https://github.com/just-4-fun/modularity/blob/master/docs/images/appstate_anim.gif)     
+_App lifecycle_
 
 
 ## Module anatomy
@@ -118,7 +119,7 @@ Since the implement is not always available and ready to execute calls, those ca
 The accessor guarantees a caller to deliver a request to the implement the moment it’s ready to execute it. (State-transparency feature).**  
 `ModuleImplement` class also supports asynchronous activation and deactivation. So in addition **the accessor guarantees the implement to call it only while it’s ready to execute calls. I.e. no earlier than its activation is finished, and no later than its deactivation is started.  (State management feature).**  
 The type of the implement is declared in the module type parameter: `Module<T: ModuleImplement>`. And when new implement is required, it’s requested from the module’s `onCreateImplement(): T` callback. In fact the module can implement it by itself. Or even return instances of different subclasses of `T` depending of the circumstances.   
-TODO ![Module structure](https://....jpg)   
+![Module structure](https://github.com/just-4-fun/modularity/blob/master/docs/images/module_anatomy.png)   
 
 
 ### Implement accessor usage
@@ -155,7 +156,7 @@ The current context can be obtained from `implement.threadContext`.
 
 A module is uniquely identified within the container by the combination of its class and its optional `bindID`. This combination is used for module lookup. And other modules use it to bind this module. Furthermore the `bindID` is accessible since the beginning of module construction so it can be used for initialization.  
 One module binds another for the purpose of its use. So in this relation the first is a user and the second is a server.  
-TODO ![Module interaction](https://....jpg)   
+![Module interaction](https://github.com/just-4-fun/modularity/blob/master/docs/images/module_relation.png)   
 
 **A server module guarantees a user that it will stay alive and serve while it’s bound by the user. I.e. the module serves as long as the user holds it.**   
 
@@ -176,7 +177,7 @@ There are two types of module binding:
 ### Cyclic dependency
 
 There are situations when two modules should use each other. And the obvious solution is for them to bind each other. But this causes a cyclic dependency.  
-TODO ![Cyclic dependency](https://....jpg)   
+![Cyclic dependency](https://github.com/just-4-fun/modularity/blob/master/docs/images/cyclic_relation.png)   
 
 A cyclic dependency occurs when two modules bind each other directly or indirectly. It can not be managed by the framework and requires one of the modules to unbind the other explicitly. To ensure no unintended cyclic dependencies, the module’s `bind` method has the parameter `allowCyclicBinding` which is `false` by default. And if it’s `false` and a cyclic dependency is detected the method throws an exception.   
 The alternative solution to a cyclic dependency is a feedback channel. 
@@ -215,7 +216,7 @@ In fact, nothing stops from using the feedback mechanism for more complex call-r
 A module is alive as long as it has users, i.e. the module is created when the first module binds it, and is destroyed after none of the modules binds it. In between these two events the module is alive and ready to serve.   
 The lifecycle of a `BaseModule` successor is simple. It’s alive until it’s unbound whereupon it’s destroyed and removed from the container.  
 A `Module` successor during its lifecycle internally passes through the following states:   
-TODO ![Module state machine](https://....jpg)   
+![Module state machine](https://github.com/just-4-fun/modularity/blob/master/docs/images/phases.png)   
 
 - **CREATED**:
 At this state the module is created and added to the container.  
