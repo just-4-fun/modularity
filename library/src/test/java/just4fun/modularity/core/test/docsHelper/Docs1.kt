@@ -24,14 +24,13 @@ class MainModule: BaseModule() {
 }
 
 class DBModule: Module<DBModule.Implement>() {
-	fun saveData(data: String) = implement.runAsync {
-		connection.save(data)
-	}
+	fun saveData(data: String) = implement.runAsync { saveDataImpl(data) }
 	
 	override fun onCreateImplement(): Implement = Implement()
 	
 	inner class Implement: ModuleImplement {
 		lateinit var connection: DummyDatabase
+		fun saveDataImpl(data: String) = connection.save(data)
 		suspend override fun SuspendUtils.onActivate(first: Boolean) {
 			connection = DummyDatabase()
 			waitUnless { connection.isOpen }

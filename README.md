@@ -24,14 +24,12 @@ In a simple scenario the framework can be used in the three simple steps:
 1. Define the “service” module:  
 	```kotlin
 	class DBModule: Module<DBModule.Implement>() {
-		fun saveData(data: String) = implement.runAsync {
-			connection.save(data)
-		}
-		
+		fun saveData(data: String) = implement.runAsync { saveDataImpl(data) }
 		override fun onCreateImplement(): Implement = Implement()
 		
 		inner class Implement: ModuleImplement {
 			lateinit var connection: DummyDatabase
+			fun saveDataImpl(data: String) = connection.save(data)
 			suspend override fun SuspendUtils.onActivate(first: Boolean) {
 				connection = DummyDatabase()
 				waitUnless { connection.isOpen }
@@ -72,19 +70,22 @@ In a simple scenario the framework can be used in the three simple steps:
 
 1. **Distribute areas of the application functionality among modules.**  
 A module is a building block of the application that performs specific part of the application’s functionality.  
-Application modules form a directed graph of dependencies. Usually starting from one “main” module (top-level) coordinating modules responsible for key areas of functionality (1st level), which in their turn are using different utility modules (2nd level).  
-Cyclic dependencies can be resolved with feedback channels.  
-Modules that have no inbound dependencies and only coordinate or use other modules (top-level like) can be subclasses of `BaseModule`. Whereas modules that are used by other modules and have non-trivial lifecycle (long initialization or restful) can extend the `Module` class. Modules that can have more than one implementation (like release and test) might consider extending `Module` class too.  
-Good module candidate:
+Application modules form a directed graph of dependencies with one or more source (top-level) vertices.   
+Cyclic dependencies are permitted but discouraged, and can be resolved with feedback channels.  A usual example can contain one “main” (top-level) module coordinating modules responsible for key areas of functionality (1st level), which in their turn are using different utility modules (2nd level).   
+Modules that have no inbound dependencies and only coordinate or use other modules (top-level alike) can be subclasses of `BaseModule`. Whereas modules that are used by other modules and/or have non-trivial lifecycle (long initialization or restful) can extend the `Module` class. Modules that can have more than one implementation (like release and test) might consider extending `Module` class too.  
+
+	Good module candidate:
 	- initializes, coordinates or uses other modules
 	- offers some functionality to different objects (service)
 	- needs to be informed if it’s of no interest anymore and should run some cleanup
 	- has substantial initialization time and wants to make it transparent for a user
 	- has “restful” lifecycle (recreated on demand, destroyed on idle) and wants to make it transparent for a user
 	- consumes substantial amount of resources or depends on some external resource that can be temporary unavailable, so it can have “restful” lifecycle   
-Bad module candidate:  
+	
+	Bad module candidate:  
 	- has instant initialization and low resource consumption (data object)
-	- is used inside the only object
+	- is used inside the only object  
+	
 2. **For each module, design its communication interface with related modules and its implementation.**
 Subclasses of the `BaseModule` have their interface and implementation integrated. Whereas `Module` subclasses have their implementation encapsulated in a separate class.
 
@@ -92,7 +93,7 @@ Subclasses of the `BaseModule` have their interface and implementation integrate
 
 1. **Standby**: The fundamental entity of an application is the module container (ModuleContainer class) which manages the creation and access to modules. As soon as the application is created, a container instance should be created too.  
 The entry point to the application is the container’s `moduleReference` method returning a `ModuleReference` instance which lets access the target module from outside of the container. It’s lightweight unless it binds the target module.   
-2. **Starting**: When the application receives a request to start, a reference to the “main” (top level) module should be obtained. And its `bind` method should be called. (The module instance returned from this call can be used right away).  
+2. **Starting**: When the application receives a request to start, the `bind` method of a “main” (top level) module reference should be called. (The module instance returned from this call can be used right away).  
 After this but before any module is created, the container’s `onPopulated` callback is invoked.   
 During its creation the “main” module binds related modules. They in the same way bind theirs. And so on until the application structure is fully initialized.
 3. **Operating**: Meanwhile the application is serving its purpose. …
@@ -102,8 +103,8 @@ At this moment the container’s `onEmpty` callback is invoked.
 Since then the application can exit the process or wait the next request for start (back to Standby phase).  
 
 **Quick recap:**   
-- To start the application get a “main” module reference, and call its `bind` method
-- To finish the application call the reference’s `unbind` method  
+- To start the application get a top-level module reference, and call its `bind` method
+- To finish the application call the reference’s `unbind` method and intercept the finish completion in container's `onEmpty` callback.  
 
 ![App lifecycle](./docs/images/app_lifecycle.gif)     
 _App lifecycle_
