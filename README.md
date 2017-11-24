@@ -346,7 +346,7 @@ This example demonstrates basic principles of using the framework in an Android 
 This demo app does two things:
 - Loads some data from an emulated database and shows  it in the UI.
 - On an UI "save" button click saves data in the database giving a feedback.  
-![Module state machine](./docs/images/example_app.png)   
+![Example](./docs/images/example_app.png)   
 
 ```kotlin
 // Instantiate the `AndroidContainer` subclass in `onCreate` method
