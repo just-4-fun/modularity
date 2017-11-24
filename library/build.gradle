@@ -1,3 +1,7 @@
+group 'com.github.just-4-fun'
+//version '0.2-SNAPSHOT'
+version '0.1'
+
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
@@ -9,7 +13,7 @@ android {
         minSdkVersion 14
         targetSdkVersion 26
         versionCode 1
-        versionName "1.0"
+        versionName project.version
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
@@ -30,7 +34,7 @@ dependencies {
     compile 'com.android.support:appcompat-v7:26.+'
     compile "org.jetbrains.kotlin:kotlin-stdlib-jre7:$kotlin_version"
     compile "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
-    compile 'com.github.just-4-fun:kotlinkit:1.0-SNAPSHOT'
+    compile 'com.github.just-4-fun:kotlinkit:0.2'
     testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
     testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testCompile 'junit:junit:4.12'
@@ -80,6 +84,7 @@ bintray {
         websiteUrl = 'https://github.com/just-4-fun/modularity'
         githubRepo = 'modularity'
         version { name = project.version }
+//        version { name = project.version }
 //        labels = ['gear', 'gore', 'gorilla']
 //        publicDownloadNumbers = true
         githubRepo = 'just-4-fun/modularity' //Optional Github repository
@@ -88,40 +93,42 @@ bintray {
 }
 
 // Maven pom configuration:
-//def pomConfig = {
-//    packaging 'aar'
-//    name 'modularity'
-//    description 'Application organization framework'
-//    url 'https://github.com/just-4-fun/modularity'
-//    scm {
-//        connection 'scm:git:git://github.com/just-4-fun/modularity.git'
-//        developerConnection 'scm:git:ssh://github.com/just-4-fun/modularity.git'
-//        url 'https://github.com/just-4-fun/modularity/tree/master'
-//    }
-//    licenses {
-//        license {
-//            name 'The Apache License, Version 2.0'
-//            url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-//        }
-//    }
-//    developers {
-//        developer {
-//            name 'Markus.M'
-//            email 'markus.marvell@gmail.com'
-//            organization 'just4fun'
-//            organizationUrl 'https://github.com/just-4-fun'
-//        }
-//    }
-//}
+def pomConfig = {
+    packaging 'aar'
+    name 'modularity'
+    description 'Modular Android application design framework'
+    url 'https://github.com/just-4-fun/modularity'
+    scm {
+        connection 'scm:git:git://github.com/just-4-fun/modularity.git'
+        developerConnection 'scm:git:ssh://github.com/just-4-fun/modularity.git'
+        url 'https://github.com/just-4-fun/modularity/tree/master'
+    }
+    licenses {
+        license {
+            name 'The Apache License, Version 2.0'
+            url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+        }
+    }
+    developers {
+        developer {
+            name 'Markus.M'
+            email 'markus.marvell@gmail.com'
+            organization 'just4fun'
+            organizationUrl 'https://github.com/just-4-fun'
+        }
+    }
+}
 
 publishing {
     publications {
         theProject(MavenPublication) {
             artifact(sourcesJar)
             artifact("$buildDir/outputs/aar/library-release.aar")
-            groupId 'com.github.just-4-fun'
             artifactId 'modularity'
-            version '0.1'
+            groupId project.group
+            version project.version
+//            groupId 'com.github.just-4-fun'
+//            version '0.1'
 //            pom.withXml {
 //                def root = asNode()
 //                root.children().last() + pomConfig

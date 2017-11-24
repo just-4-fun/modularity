@@ -342,8 +342,8 @@ The `FloatService` is registered in the library's AndroidManifest and merged int
 
 This example demonstrates basic principles of using the framework in an Android app.  
 This demo app does two things:
-- On app start loads some data from an emulated database and shows  it in the UI.
-- On a UI "save" button click saves data in the database giving a feedback.  
+- On app start, loads some data from an emulated database and shows it in the UI.
+- On a UI "save" button click, saves data in the database and shows the feedback in the UI.  
 
 ![Example](./docs/images/example_app.png)   
 
@@ -492,6 +492,23 @@ class MainActivity: Activity(), UiModuleReference<MainModule> {
 }
 ```
 
+## Installation
+
+Gradle dependency:  
+
+`compile 'com.github.just-4-fun:modularity:0.1''`
+
+Maven dependency:  
+```xml
+<dependency>
+  <groupId>com.github.just-4-fun</groupId>
+  <artifactId>modularity</artifactId>
+  <version>0.1</version>
+  <type>pom</type>
+</dependency>
+```
+ 
+ 
 TODO ## Glossary
 User
 Server
@@ -501,6 +518,5 @@ Implement
 accessor
 thread context
 reference
-
-TODO ## Installation
+ 
 TODO Proguard notes
