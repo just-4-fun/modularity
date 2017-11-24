@@ -21,7 +21,7 @@
 ## Quick example
 
 In a simple scenario the framework can be used in the three simple steps:
-1. Define the “service” module:  
+1. Define a module that provides some service (an access to the database for example):  
 	```kotlin
 	class DBModule: Module<DBModule.Implement>() {
 		fun saveData(data: String) = implement.runAsync { saveDataImpl(data) }
@@ -41,14 +41,14 @@ In a simple scenario the framework can be used in the three simple steps:
 		}
 	}
 	```  
-2. Define the “main” module:  
+2. Define a module that uses the service:  
 	```kotlin
 	class MainModule: BaseModule() {
 		val db: DBModule = bind(DBModule::class)
 		fun saveData(data: String) = db.saveData(data)
 	}
 	```  
-3. Obtain a “main” module reference to start, use, and then stop the module:  
+3. Obtain a user module reference to start, use, and then stop the module:  
 	```kotlin
 	val container = ModuleContainer()
 	val ref = container.moduleReference(MainModule::class)
@@ -56,7 +56,7 @@ In a simple scenario the framework can be used in the three simple steps:
 	module.saveData("Hello, world") // prints: Hello, world is saved.
 	ref.unbindModule()
 	
-	// The dummy implementation of some resource:
+	// The dummy implementation of the database:
 	class DummyDatabase {
 		init { thread { Thread.sleep(1000); isOpen = true } }
 		var isOpen: Boolean = false
@@ -96,7 +96,8 @@ The entry point to the application is the container’s `moduleReference` method
 2. **Starting**: When the application receives a request to start, the `bind` method of a “main” (top level) module reference should be called. (The module instance returned from this call can be used right away).  
 After this but before any module is created, the container’s `onPopulated` callback is invoked.   
 During its creation the “main” module binds related modules. They in the same way bind theirs. And so on until the application structure is fully initialized.
-3. **Operating**: Meanwhile the application is serving its purpose. …
+3. **Operating**: Meanwhile the application is serving its purpose. …   
+Note, there is no special event when the operating phase is started because actual operating begins since a construction of the first module.
 4. **Finishing**: When the application receives a request to finish, the “main” module reference’s `unbind` method have to be called.  
 Once it’s done, the “main” module’s deactivation process starts. Upon its completion the module automatically unbinds its related modules. They in the same way unbind theirs. And so on until the last module is removed from the container.   
 At this moment the container’s `onEmpty` callback is invoked.   
@@ -308,8 +309,7 @@ class User : Module<User>(), ModuleImplement {
 ## Testing
 
 Both the `ModuleContainer` and `Module` classes have their open inner `DebugInfo` class which contains some helpful debug information. And also they have the ‘debugInfo’ property to which an instance of that class can be assigned. This property is meant to be used solely for debug purpose. And its value should depend on whether a debug or release version is currently running:  
-`override val debugInfo = if (DEBUG) DebugInfo() else null
-`
+`override val debugInfo = if (DEBUG) DebugInfo() else null`  
 
 ## Android integration
 
@@ -336,15 +336,22 @@ The `UIModule`’s counterpart is the `UiModuleReference` interface that can be 
 **FloatService**  
 The `FloatService` is Android service that starts in case if the container still has running modules but the app’s activity has gone to background. By doing so it keeps the application process afloat, i.e. indicates to the Android system that the app is still running and should not be killed.  
 Also the `FloatService` serves for switching app to the foreground that increases its process priority. The `startForeground` and `stopForeground` methods of a container controls this behavior.  
-The `FloatService` have to be registered in the AndroidManifest:  
-` <service android:name="just4fun.modularity.android.FloatService"/>`  
+The `FloatService` is registered in the library's AndroidManifest and merged with the host app's manifest:  
  
-TODO about save state  
 The right way to start is to instantiate the `AndroidContainer` subclass in `onCreate` method of the `android.app.Application` subclass.
 
 ## Android example
 
+This example demonstrates basic principles of using the framework in an Android app.  
+This demo app does two things:
+- Loads some data from an emulated database and shows  it in the UI.
+- On an UI "save" button click saves data in the database giving a feedback.  
+![Module state machine](./docs/images/example_app.png)   
+
 ```kotlin
+// Instantiate the `AndroidContainer` subclass in `onCreate` method
+// of the `android.app.Application` subclass (do not forget to register it in the `AndroidManifest.xml`).
+
 class App: Application() {
 	override fun onCreate() {
 		Container(this)
@@ -353,42 +360,50 @@ class App: Application() {
 
 class Container(app: App): AndroidContainer(app) {
 	val ref = moduleReference(MainModule::class)
+	
+	// Here we use the app's Activity first launch to start the "main" module,
+	// and an Activity exit to stop the "main" module.
 	override fun onUiPhaseChange(phase: UiPhase) {
 		if (phase == UiPhase.CREATED) ref.bindModule()
 		else if (phase == UiPhase.DESTROYED) ref.unbindModule()
 	}
 	
-	override val debugInfo = DebugInfo()
-	inner class DebugInfo: AndroidDebugInfo() {
-		override fun onActivityStateChange(activity: Activity, primary: Boolean, state: String) {
-			val reconfiguring = activity.isChangingConfigurations
-			val finishing = activity.isFinishing
-			val id = activity.hashCode().toString(16)
-			val reason = if (finishing) "finishing" else if (reconfiguring) "reconfiguring" else "other"
-			Log.i("${activity::class.simpleName}", "id= $id;  prim= $primary;  reason= $reason;  state= $state")
-		}
+	// The actual completion of any module activity is intercepted here.
+	override fun onContainerEmpty() {
+		Log.i("Container", "Container is empty")
 	}
 }
+
+// The basic role of a "main" module is to initialize and coordinate other modules.
+// Here the "main" module in addition handles the communication with UI.
 
 class MainModule: UIModule<MainModule.Implement>() {
 	val db: DBModule = bind(DBModule::class)
 	val ui: MainActivity? by ActivityReference()
 	
+	fun loadData() {
+		implement.runAsync { loadDataImpl() }
+		  .onComplete { result -> ui?.showMessage(result.valueOrThrow) }
+	}
+	
 	fun saveData(data: String): AsyncResult<Boolean> = implement.runAsync { saveDataImpl(data) }
+	
+	override fun onConstructed() = loadData()
 	
 	override fun onCreateImplement() = Implement()
 	
 	inner class Implement: ModuleImplement {
-		suspend override fun SuspendUtils.onActivate(first: Boolean) {
-			val data = db.loadData().valueOrThrow
-			ui?.showMessage(data)
-		}
-		
+		suspend override fun SuspendUtils.onActivate(first: Boolean) {}
 		suspend override fun SuspendUtils.onDeactivate(last: () -> Boolean) {}
+		
+		suspend fun loadDataImpl(): String = db.loadData().valueOrThrow
 		
 		suspend fun saveDataImpl(data: String): Boolean = db.saveData(data).valueOrThrow
 	}
 }
+
+// This module imitates interactions with a database.
+// All implement's actions are performed in a separate thread as defined by the overridden thread context.
 
 class DBModule: AndroidModule<DBModule.Implement>() {
 	suspend fun loadData(): Result<String> = implement.runSuspend { loadDataImpl() }.flatten()
@@ -396,6 +411,7 @@ class DBModule: AndroidModule<DBModule.Implement>() {
 	suspend fun saveData(data: String): Result<Boolean> = implement.runSuspend { saveDataImpl(data) }.flatten()
 	
 	override fun onCreateImplement(): Implement = Implement()
+	
 	override fun onCreateThreadContext(): ThreadContext? = container.ThreadContexts.MONO(this)
 	
 	inner class Implement: ModuleImplement {
@@ -416,6 +432,8 @@ class DBModule: AndroidModule<DBModule.Implement>() {
 		suspend fun saveDataImpl(data: String): Result<Boolean> = connection.save(data)
 	}
 }
+
+// This class simulates database with long running initialization and operations.
 
 class DummyDatabase {
 	var isOpen: Boolean = false
@@ -448,6 +466,8 @@ class DummyDatabase {
 	}
 }
 
+// The Activity binds and interacts with the MainModule.
+
 class MainActivity: Activity(), UiModuleReference<MainModule> {
 	override val module = bindModule(this, MainModule::class)
 	val message by lazy { findViewById<TextView>(R.id.message) }
@@ -471,10 +491,9 @@ class MainActivity: Activity(), UiModuleReference<MainModule> {
 		Log.i("ui", "Message:  $text")
 	}
 }
-
 ```
 
-## Glossary
+TODO ## Glossary
 User
 Server
 container
@@ -484,6 +503,5 @@ accessor
 thread context
 reference
 
-
-## Installation
+TODO ## Installation
 TODO Proguard notes

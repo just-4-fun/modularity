@@ -18,6 +18,8 @@ import just4fun.modularity.core.SuspendUtils
 import kotlin.concurrent.thread
 
 
+// Instantiate the `AndroidContainer` subclass in `onCreate` method
+// of the `android.app.Application` subclass (do not forget to register it in the `AndroidManifest.xml`).
 
 class App: Application() {
 	override fun onCreate() {
@@ -27,42 +29,50 @@ class App: Application() {
 
 class Container(app: App): AndroidContainer(app) {
 	val ref = moduleReference(MainModule::class)
+	
+	// Here we use the app's Activity first launch to start the "main" module,
+	// and an Activity exit to stop the "main" module.
 	override fun onUiPhaseChange(phase: UiPhase) {
 		if (phase == UiPhase.CREATED) ref.bindModule()
 		else if (phase == UiPhase.DESTROYED) ref.unbindModule()
 	}
 	
-	override val debugInfo = DebugInfo()
-	inner class DebugInfo: AndroidDebugInfo() {
-		override fun onActivityStateChange(activity: Activity, primary: Boolean, state: String) {
-			val reconfiguring = activity.isChangingConfigurations
-			val finishing = activity.isFinishing
-			val id = activity.hashCode().toString(16)
-			val reason = if (finishing) "finishing" else if (reconfiguring) "reconfiguring" else "other"
-			Log.i("${activity::class.simpleName}", "id= $id;  prim= $primary;  reason= $reason;  state= $state")
-		}
+	// The actual completion of any module activity is intercepted here.
+	override fun onContainerEmpty() {
+		Log.i("Container", "Container is empty")
 	}
 }
+
+// The basic role of a "main" module is to initialize and coordinate other modules.
+// Here the "main" module in addition handles the communication with UI.
 
 class MainModule: UIModule<MainModule.Implement>() {
 	val db: DBModule = bind(DBModule::class)
 	val ui: MainActivity? by ActivityReference()
 	
+	fun loadData() {
+		implement.runAsync { loadDataImpl() }
+		  .onComplete { result -> ui?.showMessage(result.valueOrThrow) }
+	}
+	
 	fun saveData(data: String): AsyncResult<Boolean> = implement.runAsync { saveDataImpl(data) }
+	
+	override fun onConstructed() = loadData()
 	
 	override fun onCreateImplement() = Implement()
 	
 	inner class Implement: ModuleImplement {
-		suspend override fun SuspendUtils.onActivate(first: Boolean) {
-			val data = db.loadData().valueOrThrow
-			ui?.showMessage(data)
-		}
-		
+		suspend override fun SuspendUtils.onActivate(first: Boolean) {}
 		suspend override fun SuspendUtils.onDeactivate(last: () -> Boolean) {}
+		
+		suspend fun loadDataImpl(): String = db.loadData().valueOrThrow
 		
 		suspend fun saveDataImpl(data: String): Boolean = db.saveData(data).valueOrThrow
 	}
 }
+
+// This module imitates interactions with a database.
+// All implement's actions are performed in a separate thread as defined by the overridden thread context.
 
 class DBModule: AndroidModule<DBModule.Implement>() {
 	suspend fun loadData(): Result<String> = implement.runSuspend { loadDataImpl() }.flatten()
@@ -70,6 +80,7 @@ class DBModule: AndroidModule<DBModule.Implement>() {
 	suspend fun saveData(data: String): Result<Boolean> = implement.runSuspend { saveDataImpl(data) }.flatten()
 	
 	override fun onCreateImplement(): Implement = Implement()
+	
 	override fun onCreateThreadContext(): ThreadContext? = container.ThreadContexts.MONO(this)
 	
 	inner class Implement: ModuleImplement {
@@ -90,6 +101,8 @@ class DBModule: AndroidModule<DBModule.Implement>() {
 		suspend fun saveDataImpl(data: String): Result<Boolean> = connection.save(data)
 	}
 }
+
+// This class simulates database with long running initialization and operations.
 
 class DummyDatabase {
 	var isOpen: Boolean = false
@@ -121,6 +134,8 @@ class DummyDatabase {
 		true
 	}
 }
+
+// The Activity binds and interacts with the MainModule.
 
 class MainActivity: Activity(), UiModuleReference<MainModule> {
 	override val module = bindModule(this, MainModule::class)
