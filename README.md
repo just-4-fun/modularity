@@ -15,8 +15,8 @@
 - [Testing](#testing)
 - [Android integration](#android-integration)
 - [Android example](#android-example)
-- [Glossary](#glossary)
 - [Installation](#installation)
+- [Glossary](#glossary)
 
 ## Quick example
 
@@ -220,11 +220,11 @@ The lifecycle of a `BaseModule` successor is simple. It’s alive until it’s u
 A `Module` successor during its lifecycle internally passes through the following states:   
 ![Module state machine](./docs/images/state_machine.png)   
 
-- **CREATED**:
+- **CREATED**:  
 At this state, the module is created and added to the container.  
 After the constructor is called it receives `onConstructed` callback. The constructor and callback are the proper places for basic module activation. E.g. binding related modules.   
 In case if the current instance of the module is created during the destruction of the previous instance, the current one will wait until the latter is finally destroyed and removed from the container.    
-- **RESTING**: 
+- **RESTING**:   
 It’s where an implement instance does not yet exist (is null). The module rests and waits to enter the next state until one of the following happens (considering it’s bound and enabled):   
 	- it’s restless;
 	- it’s restful and there is a request to it;
@@ -232,20 +232,20 @@ It’s where an implement instance does not yet exist (is null). The module rest
 	- it’s unbound and it didn’t pass the last deactivation (final approach);     
 	
 	Otherwise, if the module is unbound it enters the DESTROYED state.  
-- **ACTIVATING**: 
+- **ACTIVATING**:   
 The module’s `onCreateImplement` callback is invoked and should return an implement instance. It can be a new instance or the reference to the module itself if it acts as its own implement. Here the module can pass any data required by the newly created implement. And then the implement’s `suspend fun SuspendUtils.onActivate(first)` callback is invoked. The suspension runs in the thread of the caller, although the `SuspendUtils` receiver can switch the thread context. The activation finishes as soon as the callback returns from its suspension. If this is the first activation pass the `first` param is true.   
-- **READY**: 
+- **READY**:   
 It’s where the implement actually operates. Firstly it executes requests queued by the accessor before. Then it keeps processing incoming requests until one of the following happens:  
 	- it’s restful, hasn’t been having requests (i.e. idle) during the specified (in restDelay) time, and all the users bound with `keepReady=true` are resting; 
 	- it’s disabled;  
 	- it has been unbound and has no requests;  
 	
 	The module’s property `isReady` indicates if the module is currently in READY state.  
-- **DEACTIVATING**: 
+- **DEACTIVATING**:   
 The implement’s `suspend fun SuspendUtils.onDeactivate(last)` callback is invoked. The suspension runs in the thread of the caller, although the `SuspendUtils` receiver can switch the thread context. The deactivation finishes as soon as the callback returns from its suspension. Then the current instance of implement is set to null and the module enters the RESTING state again.   
 The restful module can circulate inside the RESTING - READY loop until it’s destroyed. If this is the final deactivation pass before the destruction the `last` param is true. The framework guarantees the final deactivation so that the implement could do the proper self-cleanup.   
 From the final deactivation, the module is considered unavailable, the implement accessor rejects requests, and if a new instance of the module is created it waits until this instance is destroyed. 
-- **DESTROYED** :  
+- **DESTROYED**:  
 It’s where the module’s `onDestroyed` callback is invoked and it’s removed from the container. The module is no more alive.
 The property `isAlive` indicates if the module is currently alive or destroyed.  
 
@@ -257,8 +257,8 @@ A module is restless by default which means it stays READY even if it doesn’t 
 The module’s `setRestless` can be called to return to default behavior.   
 The current state can be checked with the `isRestful` property.  
 TODO about RestCalculator  
-- **Keeping a server ready:** 
-The option is available as the parameter of the method `bind`. In this case, the server can additionally guarantee its user to stay READY all the way the user is not RESTING. This allows the user to communicate with this module synchronously. However, this prevents the restful module from going rest.   
+- **Keeping a server module ready:** 
+The option is available as the `keepReady` parameter of the method `bind`. In this case, the server can additionally guarantee its user to stay READY all the way the user is not RESTING. This allows the user to communicate with this module synchronously. However, this prevents the restful module from going rest.   
 - **Setting a module enabled / disabled:** 
 In case a module is unable to operate properly it can be disabled. That forces it to deactivate and stay resting.  All the further requests will be rejected, i.e. return an exception.   
 A module is also disabled by the framework in case it throws an exception during its creation, creation of its implement, activation or deactivation. If one of these happens the exception will be propagated to the `onUnhandledError` method of the `DebugInfo` class which can be overridden by extending it and assigning its instance to the `debugInfo` property of the module.    
@@ -271,19 +271,19 @@ The current state can be checked with the `isEnabled` property.
 
 The framework supports the late binding that allows instantiating module classes depending on a runtime configuration. That is, a user, when binding, can specify not the concrete class of the server it wants to bind, but the “interface” class. The configuration code associates “interface” class with a version of concrete class depending on the specific purpose (e.g. release or test version).   
 Example:   
-- Define the server “interface” class:
+- Define an “interface” module class:
 ```kotlin
 abstract class BaseServer: Module<BaseServer>(), ModuleImplement  {
 	abstract fun perform()
 }
 ```
-- Define the "test" version:
+- Define a "test" version of the implement:
 ```kotlin
 class TestServer : BaseServer(), ModuleImplement {
 	override fun perform() = println("Test")
 }
 ```
-- Define the "release" version:
+- Define a "release" version of the implement:
 ```kotlin
 class ReleaseServer : BaseServer(), ModuleImplement {
 	override fun perform() = println("Release")
@@ -293,8 +293,8 @@ class ReleaseServer : BaseServer(), ModuleImplement {
 ```kotlin
 class Container: ModuleContainer() {
 	init {
-		val injectKlas = if (isDebug) TestServer::class else ReleaseServer::class
-		associate(BaseServer::class, injectKlas)
+		val actualKlas = if (isDebug) TestServer::class else ReleaseServer::class
+		associate(BaseServer::class, actualKlas)
 	}
 }
 ```
@@ -496,7 +496,9 @@ class MainActivity: Activity(), UiModuleReference<MainModule> {
 
 Gradle dependency:  
 
-`compile 'com.github.just-4-fun:modularity:0.1''`
+```
+compile 'com.github.just-4-fun:modularity:0.1'
+```
 
 Maven dependency:  
 ```xml
